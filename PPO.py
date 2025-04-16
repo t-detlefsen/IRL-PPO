@@ -8,8 +8,8 @@ class ReplayBuffer:
     Buffer to store agent experiences
     '''
     def __init__(self):
-        # TODO: Initialize arrays
-        pass
+        # Initialize arrays
+        self.reset()
 
     def add_rollouts(self,
                      actions: torch.tensor,
@@ -22,7 +22,7 @@ class ReplayBuffer:
         Add rollouts to the replay buffer
 
         Args:
-             actions (torch.Tensor): Selected actor actions (B, action_dim)
+            actions (torch.Tensor): Selected actor actions (B, action_dim)
             states (torch.Tensor): Observations fed to the policy (B, state_dim)
             logprobs (torch.Tensor): Log π(a\|s) from the actor (B, 1)
             rewards (torch.Tensor): Rewards returned **after** the step (B,)
@@ -46,8 +46,6 @@ class ReplayBuffer:
         self.rewards:      List[torch.Tensor] = []
         self.state_values: List[torch.Tensor] = []
         self.is_terminals: List[torch.Tensor] = []
-
-
 
 class ActorCritic(nn.Module):
     '''
@@ -219,7 +217,6 @@ class PPO:
 
         # return numpy array for the environment API
         return action.cpu().numpy()
-
 
     def update(self):
         '''
