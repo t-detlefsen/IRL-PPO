@@ -9,40 +9,81 @@ class PPO_trainer(object):
     def __init__(self, params):
         self.params = params
 
-        # TODO: Setup PPO agent
-        agent = PPO()
+        # Setup PPO agent
+        self.agent = PPO(5, # state_dim
+                         10, # action_dim
+                         params["lr_actor"],
+                         params["lr_critic"],
+                         params["gamma"],
+                         params["K_epochs"],
+                         params["eps_clip"],
+                         params["action_std_init"],
+                         torch.device(params["device"]))
+        
+        if params["checkpoint"] is not None:
+            self.agent.load(params["checkpoint"])
 
-        # TODO: Setup environment
+        # TODO: Setup environments
 
     def run_training_loop(self):
         '''
         Train the RL agent usng PPO
         '''
-        # TODO: Loop through iterations
+        # Loop through iterations
+        for i in range(self.params["n_iter"] + 1):
             # ----------- TRAINING -----------
             # TODO: Reset train environment
-            # TODO: Loop through steps
-                # TODO: Generate action
+
+            # Loop through steps
+            for j in range(self.params["max_ep_len"]):
+                # Generate action
+                self.agent.select_action(TODO)
+
                 # TODO: Interact w/ environment
-                # TODO: Update agent
+
+                # Update replay buffer
+                self.buffer.rewards.append(TODO)
+                self.buffer.is_terminals.append(TODO)
+
             # TODO: Evaluate performance
 
-            # ---------- EVALUATION ----------
-            # TODO: Evaluate if specified
-                # TODO: Reset eval environment
-                # TODO: Loop through steps
-                    # TODO: Generate action
-                    # TODO: Interact w/ environment
-                # TODO: Evaluate performance
-                # TODO: Save model?
+            # Update agent if specified
+            if i % self.params["update_freq"] == 0:
+                self.agent.update()
 
-        pass
+            # ---------- EVALUATION ----------
+            # Evaluate if specified
+            if i % self.params["eval_freq"] == 0:
+                # TODO: Reset eval environment
+
+                # Loop through steps
+                for j in range(self.params["max_ep_len"]):
+                    # Generate action
+                    self.agent.select_action(TODO)
+
+                    # TODO: Interact w/ environment
+
+                # TODO: Evaluate performance
+                
+                # Save model
+                self.agent.save("ckpts/epoch_{}.pth", i)
 
 def main():
-    # TODO: Setup argument parser 
+    # Setup argument parser 
     parser = argparse.ArgumentParser()
-    # parser.add_argument('--<NAME>', type=<TYPE>)
-    # ...
+    parser.add_argument('--n_iter', type=int, default=20)
+    parser.add_argument('--max_ep_len', type=int, default=1000)
+    parser.add_argument('--update_freq', type=int, default=4)
+    parser.add_argument('--eval_freq', type=int, default=5)
+    parser.add_argument('--max_', type=float, default=3e-4)
+    parser.add_argument('--lr_actor', type=float, default=3e-4)
+    parser.add_argument('--lr_critic', type=float, default=3e-4)
+    parser.add_argument('--gamma', type=float, default=0.99)
+    parser.add_argument('--K_epochs', type=int, default=4)
+    parser.add_argument('--eps_clip', type=float, default=0.2)
+    parser.add_argument('--action_std_init', type=float, default=0.6)
+    parser.add_argument('--device', type=str, default="cpu", choices={"cpu", "cuda"})
+    parser.add_argument('--checkpoint', type=str, default=None)
     args = parser.parse_args()
 
     params = vars(args)
