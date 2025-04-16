@@ -65,11 +65,11 @@ def make_envs(args, run_name):
 if __name__ == "__main__":
     import time
     from dataclasses import dataclass
-    import tyro
+    import tyroty
 
     @dataclass
     class Args:
-        env_id: str = "PickCube-v1"
+        env_id: str = "OpenCabinetDrawer-v1"
         num_envs: int = 8
         num_eval_envs: int = 2
         evaluate: bool = False
