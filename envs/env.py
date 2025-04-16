@@ -4,6 +4,7 @@ from mani_skill.utils.wrappers.record import RecordEpisode
 from mani_skill.vector.wrappers.gymnasium import ManiSkillVectorEnv
 import mani_skill.envs
 import gymnasium as gym
+import torch 
 
 def make_envs(args, run_name):
     env_kwargs = dict(obs_mode="state", render_mode="rgb_array", sim_backend="physx_cuda")
@@ -93,6 +94,9 @@ if __name__ == "__main__":
 
     eval_obs, _ = eval_envs.reset(seed=42)
     print("Eval env initialized. Eval obs shape:", eval_obs.shape)
-
+    # FOR EXAMPLE VIDEO
+    for _ in range(60):
+        actions = torch.zeros((args.num_envs,) + envs.single_action_space.shape)
+        obs, reward, done, trunc, info = envs.step(actions)
     envs.close()
     eval_envs.close()
