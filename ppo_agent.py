@@ -25,7 +25,7 @@ class PPO:
         self.clip_epsilon=args.clip_epsilon
         self.MSE_loss = nn.MSELoss()
         
-        self.K_epochs=self.K_epochs
+        self.K_epochs=args.K_epochs
        
         self.gae_lambda=args.gae_lambda
         
@@ -33,7 +33,7 @@ class PPO:
         self.act_dim=act_dim
         self.lr_actor=args.learning_rate_actor
         self.lr_critic=args.learning_rate_critic
-        self.train_batch_size=args.mini_batch_size
+        self.train_batch_size=args.minibatch_size
         self.reward_to_go=args.reward_to_go
 
         
@@ -71,8 +71,9 @@ class PPO:
         '''
         # TODO: Query Old Policy
         # TODO: Return action
+        #print(state)
         with torch.no_grad():
-            state = torch.FloatTensor(state).to(get_device())
+            state = state.float().to(get_device())
             action, action_logprob, value = self.old_policy.act(state)
             action =to_numpy(action)
         return action
@@ -87,11 +88,21 @@ class PPO:
 
         # Estimate the advantage ,
         # by querying the neural network that you're using to learn the value function
-
-        values_normalized = self.policy.critic(obs)
+        obs= from_numpy(obs)
+        values_normalized = self.policy.critic(obs).squeeze(-1)
+        values_normalized = values_normalized.reshape(-1) 
+        print("q_val shape= ", q_values.shape)
+        print("qval_ndim= ",q_values.ndim)
+        print("q_val type= ", type(q_values))
+        print("values_normalized_shape= ", values_normalized.shape)
+        print("values_normalized_ndim= ", values_normalized.ndim)
+        print("values_normalized type= ", type(values_normalized))
         assert values_normalized.ndim == q_values.ndim
 
-        values= unnormalize(values_normalized, q_values.mean(), q_values.std())
+        
+        values = unnormalize(values_normalized, q_values.mean(), q_values.std()).detach().cpu().numpy()
+
+        
         
         
         if self.gae_lambda is not None:
@@ -99,19 +110,19 @@ class PPO:
             values = np.append(values, [0])
 
             ## combine rews_list into a single array
-            rewards = np.concatenate(rewards_list)
-
+            rewards_flat = np.concatenate(rewards_list).reshape(-1)
+            print(rewards_flat.shape)
             ## create empty numpy array to populate with GAE advantage
             ## estimates, with dummy T+1 value for simpler recursive calculation
             batch_size = obs.shape[0] #Equal to T
-            advantages = np.zeros(batch_size + 1)
+            advantages = np.zeros_like(q_values)
 
             for i in reversed(range(batch_size)):
 
                 non_terminal_flag=1-terminals[i]#0 when its the last in its trajectory
-                TD_error= rewards[i] + self.gamma *non_terminal_flag* values[i+1] - values[i] #temporal difference error / delta in the hw pdf
+                TD_error= rewards_flat[i] + self.gamma *non_terminal_flag* values[i+1] - values[i] #temporal difference error / delta in the hw pdf
                 advantages[i] = TD_error + self.gamma * self.gae_lambda * non_terminal_flag * advantages[i+1] #recursive calculation of the advantage form pdf. non_terminal_flag ensures advantages arent used at ends of trajectories
-            advantages = advantages[:-1]
+            #advantages = advantages[:-1]
 
         else:
         
@@ -134,6 +145,7 @@ class PPO:
         all_logs = []
        # Collects batch of data from replay buffer
         ob_batch, ac_batch, re_batch, next_ob_batch, terminal_batch = self.sample_replay_buffer(self.train_batch_size)
+       
         q_vals= calculate_q_vals(rewards_list=re_batch,
                                     gamma=self.gamma,
                                     rtg=self.reward_to_go)
@@ -141,7 +153,23 @@ class PPO:
                                                 rewards_list=re_batch,
                                                 q_values=q_vals,
                                                 terminals=terminal_batch)
-        ob_batch, ac_batch, re_batch, next_ob_batch, terminal_batch = self.sample_replay_buffer(self.train_batch_size)
+        T, N, obs_dim  = ob_batch.shape      # (50, 112, obs_dim)  for example
+        _, _, act_dim  = ac_batch.shape
+        ob_batch       = ob_batch.reshape(-1, obs_dim)
+        ac_batch       = ac_batch.reshape(-1, act_dim)
+        advantages     = advantages.reshape(-1)
+        q_vals         = q_vals.reshape(-1)
+        terminal_batch = terminal_batch.reshape(-1)
+
+
+        ob_batch = from_numpy(ob_batch)
+        ac_batch = from_numpy(ac_batch)
+        
+        re_batch = np.array(re_batch)
+        re_batch=from_numpy(re_batch)
+        print("re_batch shape = ", re_batch.shape)
+        advantages = from_numpy(advantages)
+        
         all_logs = []
         for train_step in range(self.K_epochs):
             logprobs, state_values, dist_entropy = self.policy.evaluate(observation=ob_batch, action=ac_batch)
@@ -152,7 +180,7 @@ class PPO:
 
             # Finding Surrogate Loss  
             surr1 = ratios * advantages
-            surr2 = torch.clamp(ratios, 1-self.eps_clip, 1+self.eps_clip) * advantages
+            surr2 = torch.clamp(ratios, 1-self.clip_epsilon, 1+self.clip_epsilon) * advantages
 
             # final loss of clipped objective PPO
             loss = -torch.min(surr1, surr2) + 0.5 * self.MSE_loss(state_values, re_batch) - 0.01 * dist_entropy
@@ -161,7 +189,7 @@ class PPO:
             self.optimizer.zero_grad()
             loss.mean().backward()
             self.optimizer.step()
-        self.policy_old.load_state_dict(self.policy.state_dict())
+        self.old_policy.load_state_dict(self.policy.state_dict())
         self.replay_buffer.clear()
         return {
             'Training Loss': to_numpy(loss),

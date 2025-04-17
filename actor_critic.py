@@ -11,19 +11,21 @@ class ActorCritic(nn.Module):
                 #Actor architecture
                 n_hl_actor: int =3,# num of hidden layers
                 hl_size_actor =256, # hidden layer sizes
-                activation_actor: str = 'tanh',
-                output_activation_actor: str = 'identity',
+                activation_actor = 'tanh',
+                output_activation_actor = 'identity',
                 # Critic architecture
                 n_hl_critic: int =3,# num of hidden layers
                 hl_size_critic =256, # hidden layer sizes
-                activation_critic: str = 'tanh',
-                output_activation_critic: str = 'identity',
+                activation_critic= 'tanh',
+                output_activation_critic = 'identity',
                 ):
 
         # TODO: Initialize Params
         # TODO: Initialize Actor
         # TODO: Initialize Critic
-        self.logstd=logstd
+        super().__init__()
+        self.logstd=nn.Parameter(torch.ones(1, act_dim))*logstd
+        self.logstd.to(get_device())
         self.actor = build_mlp(
                                 input_size=obs_dim,
                                 output_size=act_dim,
@@ -45,13 +47,19 @@ class ActorCritic(nn.Module):
         self.critic.to(get_device())
 
     def forward(self, observation: torch.FloatTensor):
+        #print(observation.shape)
         action_means= self.actor(observation) # the mean action from each observation in the batch
-        covariance_matrix = torch.diag(torch.exp(self.logstd)) #shape = [action_dim, action_dim]
+        std = torch.exp(self.logstd).to(action_means.device)
+        std = std.expand_as(action_means)
         batch_size=action_means.shape[0]
-        batch_covariance_matrix= covariance_matrix.repeat(batch_size,1,1)#repeats the matrix so each batch has its own covariance matrix
-        
-        action_dist_out = distributions.MultivariateNormal(action_means,
-                                                           scale_tril = batch_covariance_matrix)
+        #print(action_means.shape)
+        covariance_matrix = torch.diag_embed(std)
+
+        batch_covariance_matrix= covariance_matrix.expand(batch_size, -1, -1)
+#repeats the matrix so each batch has its own covariance matrix
+        #print(batch_covariance_matrix.shape)
+        action_dist_out = distributions.MultivariateNormal(action_means.to(get_device()),
+                                                           scale_tril = batch_covariance_matrix.to(get_device()))
         return action_dist_out
 
 

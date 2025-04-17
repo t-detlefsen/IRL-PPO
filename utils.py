@@ -23,8 +23,8 @@ def build_mlp(
         output_size: int,
         n_layers: int,
         size: int,
-        activation: Activation = 'tanh',
-        output_activation: Activation = 'identity',
+        activation = 'tanh',
+        output_activation = 'identity',
 ):
     _str_to_activation = {
     'relu': nn.ReLU(),
@@ -48,10 +48,9 @@ def build_mlp(
         returns:
             output_placeholder: the result of a forward pass through the hidden layers + the output layer
     """
-    if isinstance(activation, str):
-        activation = _str_to_activation[activation]
-    if isinstance(output_activation, str):
-        output_activation = _str_to_activation[output_activation]
+    
+    activation = _str_to_activation[activation]
+    output_activation = _str_to_activation[output_activation]
     layers = []
     in_size = input_size
     for _ in range(n_layers):
@@ -62,7 +61,7 @@ def build_mlp(
     layers.append(output_activation)
     return nn.Sequential(*layers)
 
-device = torch.device("gpu")
+device = torch.device("cuda")
 def init_gpu(use_gpu=True, gpu_id=0):
     global device
     if torch.cuda.is_available() and use_gpu:
@@ -105,7 +104,9 @@ def _discounted_cumsum(rewards,gamma):
         diff_matrix= time_indxs-time_col_vect #matrix of differences shape (traj_length, traj_length)
         disc_fact_matrix= np.power(gamma, diff_matrix) #matrix of discount factors shape (traj_length, traj_length)
         disc_fact_matrix=np.triu(disc_fact_matrix)#need the upper triangular matrix vals
-        rtgs=disc_fact_matrix @ rewards.reshape(-1,1)
+        # print("disc_factor_matrix= ",disc_fact_matrix.shape)
+        # print("rwds shape= ",rewards.shape)
+        rtgs=disc_fact_matrix @ rewards
         return rtgs.flatten() 
 
 def _discounted_return(rewards,gamma):
@@ -152,8 +153,8 @@ def calculate_q_vals( rewards_list,gamma,rtg:bool=True):
     return q_vals  # return an array
 
 
-def sample_trajectory(env, policy, num_steps_per_rollout, render=False, render_mode=('rgb_array')):
-    ob = env.reset()
+def sample_trajectory(env, policy, num_steps_per_rollout, seed:int):
+    ob, _ = env.reset(seed=seed)
     obs, acs, rewards, next_obs, terminals, image_obs = [], [], [], [], [], []
     steps = 0
     while True:
@@ -170,11 +171,14 @@ def sample_trajectory(env, policy, num_steps_per_rollout, render=False, render_m
         #         env.render(mode=render_mode)
         #         time.sleep(env.model.opt.timestep)
         obs.append(ob)
-        ac = policy.select_action(ob)[0]# HINT: query the policy's get_action function [OK]
-        acs.append(ac)
+        ac_multi = policy.select_action(ob)# HINT: query the policy's get_action function [OK]
+        #print ("multi action size= ",ac_multi.shape)
+       
+        
+        acs.append(ac_multi)
 
         # take that action and record results
-        ob, rew, done, _ = env.step(ac)
+        ob, rew, done,_,info = env.step(ac_multi)
 
         # record result of taking that action
         steps += 1
@@ -182,8 +186,8 @@ def sample_trajectory(env, policy, num_steps_per_rollout, render=False, render_m
         rewards.append(rew)
 
        
-        # HINT: rollout can end due to done, or due to max_path_length
-        if (done==True) or (steps>=num_steps_per_rollout):
+        # HINT: rollout can end due to max_path_length
+        if (steps>=num_steps_per_rollout):
             rollout_done = 1 
         else:
             rollout_done = 0
@@ -193,13 +197,13 @@ def sample_trajectory(env, policy, num_steps_per_rollout, render=False, render_m
             break
     return Path(obs, image_obs, acs, rewards, next_obs, terminals)
 
-def sample_trajectories(env, policy, min_timesteps_per_batch, max_path_length, render=False, render_mode=('rgb_array')):
+def sample_trajectories(env, policy, min_timesteps_per_batch, max_path_length, seed:int):
     #  get this from hw1
 
     timesteps_this_batch = 0
     paths = []
     while timesteps_this_batch < min_timesteps_per_batch:
-        path=sample_trajectory(env, policy, max_path_length, render, render_mode)
+        path=sample_trajectory(env, policy, max_path_length, seed)
         paths.append(path)
         timesteps_this_batch = timesteps_this_batch+get_pathlength(path)
         print('At timestep:    ', timesteps_this_batch, '/', min_timesteps_per_batch, end='\r')
@@ -225,11 +229,12 @@ def Path(obs, image_obs, acs, rewards, next_obs, terminals):
     """
     if image_obs != []:
         image_obs = np.stack(image_obs, axis=0)
-    return {"observation" : np.array(obs, dtype=np.float32),
+    
+    return {"observation" : np.array([o.cpu().numpy() for o in obs], dtype=np.float32),
             "image_obs" : np.array(image_obs, dtype=np.uint8),
-            "reward" : np.array(rewards, dtype=np.float32),
+            "reward" : np.array([r.cpu().numpy() for r in rewards], dtype=np.float32),
             "action" : np.array(acs, dtype=np.float32),
-            "next_observation": np.array(next_obs, dtype=np.float32),
+            "next_observation": np.array([no.cpu().numpy() for no in next_obs], dtype=np.float32),
             "terminal": np.array(terminals, dtype=np.float32)}
 
 

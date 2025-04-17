@@ -1,4 +1,4 @@
-from collections import defaultdict
+
 import os
 
 import time
@@ -6,18 +6,7 @@ from dataclasses import dataclass
 from typing import Optional
 import tyro
 
-# ManiSkill specific imports
-import mani_skill.envs
-from mani_skill.utils import gym_utils
-from mani_skill.utils.wrappers.flatten import FlattenActionSpaceWrapper
-from mani_skill.utils.wrappers.record import RecordEpisode
-from mani_skill.vector.wrappers.gymnasium import ManiSkillVectorEnv
 
-from ppo_trevors_version.infrastructure.rl_trainer import RL_Trainer
-from ppo_trevors_version.infrastructure.PPO_trainer import PPOTrainer
-from ppo_trevors_version.agents.PPO_agent import PPOAgent
-from ppo_trevors_version.infrastructure.logger import Logger
-from ppo_trevors_version.infrastructure.utils import *
 from ppo_trainer import PPO_trainer
 @dataclass
 class Args:
@@ -89,13 +78,13 @@ class Args:
     reward_to_go: bool = True
     n_hl_actor: int =3# num of hidden layers
     hl_size_actor =256 # hidden layer sizes
-    activation_actor: str = 'tanh'
-    output_activation_actor: str = 'identity'
+    activation_actor = 'tanh'
+    output_activation_actor= 'identity'
     # Critic architecture
     n_hl_critic: int =3# num of hidden layers
     hl_size_critic =256 # hidden layer sizes
-    activation_critic: str = 'tanh',
-    output_activation_critic: str = 'identity'
+    activation_critic= 'tanh'
+    output_activation_critic = 'identity'
 
     # to be filled in runtime
     batch_size: int = 0
@@ -108,7 +97,7 @@ class Args:
 
 
 
-def main():
+if __name__ == "__main__":
 
     args = tyro.cli(Args)
     args.batch_size = int(args.num_envs * args.num_steps_per_rollout)
@@ -125,7 +114,9 @@ def main():
 
     ppo_trainer= PPO_trainer(args)
     ppo_trainer.run_training_loop()
+    ppo_trainer.close_envs()
+    ppo_trainer.close_logger()
 
 
-if __name__ == "__main__":
-    main()
+
+    

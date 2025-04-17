@@ -64,7 +64,8 @@ class PPO_trainer(object):
         training_trajs,envsteps_this_batch= sample_trajectories(env=self.envs,
                                                                 policy=collect_policy,
                                                                 min_timesteps_per_batch=batch_size,
-                                                                max_path_length=self.num_steps_per_rollout
+                                                                max_path_length=self.num_steps_per_rollout,
+                                                                seed=self.args.seed
                                                                 )
         
 
@@ -93,7 +94,7 @@ class PPO_trainer(object):
         total_env_steps=0
         for iteration in range(1, self.num_training_iter + 1):
             print("\n\n********** Iteration %i ************"%iteration)
-            paths, env_steps_thisbatch = self.collect_training_trajectories(env=self.envs,
+            paths, env_steps_thisbatch = self.collect_training_trajectories(
                                                                             collect_policy=self.ppo_agent,
                                                                             batch_size=self.ppo_agent.train_batch_size
                                                                             )
