@@ -1,9 +1,10 @@
 import argparse
-from utils import *
-from PPO import PPO
+import datetime import datetime
 
+from PPO import PPO
 from envs.env import make_envs
-import time
+from utils import *
+
 class PPO_trainer(object):
     '''
     Train an RL agent using PPO
@@ -11,9 +12,17 @@ class PPO_trainer(object):
     def __init__(self, params):
         self.params = params
 
+        # Setup environments
+        run_name = f"{self.params['env_id']}_{datetime.now()}"
+        self.envs, self.eval_envs = make_envs(argparse.Namespace(**self.params), run_name)
+
+        # Observation/action shapes from env
+        obs_shape = self.envs.single_observation_space.shape[0]
+        act_shape = self.envs.single_action_space.shape[0]
+
         # Setup PPO agent
-        self.agent = PPO(5, # state_dim
-                         10, # action_dim
+        self.agent = PPO(obs_shape,
+                         act_shape,
                          params["lr_actor"],
                          params["lr_critic"],
                          params["gamma"],
@@ -25,16 +34,6 @@ class PPO_trainer(object):
         if params["checkpoint"] is not None:
             self.agent.load(params["checkpoint"])
 
-        # TODO: Setup environments
-        run_name = f"{self.params['env_id']}_{int(time.time())}"
-        self.envs, self.eval_envs = make_envs(argparse.Namespace(**self.params), run_name)
-
-        # Observation/action shapes from env
-        obs_shape = self.envs.single_observation_space.shape[0]
-        act_shape = self.envs.single_action_space.shape[0]
-        # TODO: Input shapes to agent
-
-
     def run_training_loop(self):
         '''
         Train the RL agent usng PPO
@@ -42,47 +41,48 @@ class PPO_trainer(object):
         # Loop through iterations
         for i in range(self.params["n_iter"] + 1):
             # ----------- TRAINING -----------
-            # TODO: Reset train environment
+            # Reset train environment
             obs, _ = self.envs.reset()
+            train_rewards = []
 
             # Loop through steps
             for j in range(self.params["max_ep_len"]):
                 # Generate action
-                self.agent.select_action(TODO)
+                self.agent.select_action(obs)
 
-                # TODO: Interact w/ environment
+                # Interact w/ environment
                 action = self.agent.select_action(obs)
-                obs, reward, done, trunc, info = self.envs.step(action)
+                obs, reward, terminal, _, _ = self.envs.step(action)
 
                 # Update replay buffer
-                self.buffer.rewards.append(TODO)
-                self.buffer.is_terminals.append(TODO)
+                self.buffer.rewards.append(reward)
+                self.buffer.is_terminals.append(terminal)
 
-            # TODO: Evaluate performance
+            # Evaluate performance
+            print("Train mean reward:", torch.tensor(train_rewards).mean().item())
 
             # Update agent if specified
             if i % self.params["update_freq"] == 0:
                 self.agent.update()
 
-            eval_obs, _ = self.eval_envs.reset()
-            eval_rewards = []
             # ---------- EVALUATION ----------
             # Evaluate if specified
             if i % self.params["eval_freq"] == 0:
-                # TODO: Reset eval environment
+                # Reset eval environment
                 eval_obs, _ = self.eval_envs.reset()
                 eval_rewards = []
 
                 # Loop through steps
                 for j in range(self.params["max_ep_len"]):
                     # Generate action
-                    self.agent.select_action(TODO)
+                    self.agent.select_action(eval_obs)
 
-                    # TODO: Interact w/ environment
+                    # Interact w/ environment
                     action = self.agent.select_action(obs)
-                    obs, reward, done, trunc, info = self.envs.step(action)
+                    obs, reward, _, _, _ = self.envs.step(action)
                     eval_rewards.append(reward)
-                # TODO: Evaluate performance
+                
+                # Evaluate performance
                 print("Eval mean reward:", torch.tensor(eval_rewards).mean().item())
 
                 # Save model
@@ -103,7 +103,7 @@ def main():
     parser.add_argument('--eps_clip', type=float, default=0.2)
     parser.add_argument('--action_std_init', type=float, default=0.6)
     parser.add_argument('--device', type=str, default="cpu", choices={"cpu", "cuda"})
-    parser.add_argument('--checkpoint', type=str, default=None)
+    parser.add_argument('--checkpoint', type=str, default=None) # Might need modified if used
 
     # Environment specific arguments
     parser.add_argument('--env_id', type=str, default='PickCube-v1')

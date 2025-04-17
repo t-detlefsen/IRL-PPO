@@ -2,15 +2,27 @@ import os
 from mani_skill.utils.wrappers.flatten import FlattenActionSpaceWrapper
 from mani_skill.utils.wrappers.record import RecordEpisode
 from mani_skill.vector.wrappers.gymnasium import ManiSkillVectorEnv
-import mani_skill.envs
 import gymnasium as gym
 import torch 
 
-def make_envs(args, run_name):
+def make_envs(args: dict, run_name: str):
+    '''
+    Create environments for training and evaluation
+
+    Args:
+        args (dict): Miscellaneous parameters
+        run_name (str): Name of experiment
+    Return:
+        envs (TODO): Training environments
+        eval_envs (TODO): Evaluation environments
+    '''
+    
+    # Setup environment arguments
     env_kwargs = dict(obs_mode="state", render_mode="rgb_array", sim_backend="physx_cuda")
     if args.control_mode is not None:
         env_kwargs["control_mode"] = args.control_mode
 
+    # Create environments
     envs = gym.make(
         args.env_id,
         num_envs=args.num_envs if not args.evaluate else 1,
@@ -24,6 +36,7 @@ def make_envs(args, run_name):
         **env_kwargs
     )
 
+    # Flatten action space if is gym.space.Dict
     if isinstance(envs.action_space, gym.spaces.Dict):
         envs = FlattenActionSpaceWrapper(envs)
         eval_envs = FlattenActionSpaceWrapper(eval_envs)
@@ -31,9 +44,10 @@ def make_envs(args, run_name):
     if args.capture_video:
         eval_output_dir = f"runs/{run_name}/videos"
         if args.evaluate:
-            eval_output_dir = f"{os.path.dirname(args.checkpoint)}/test_videos"
+            eval_output_dir = f"runs/{os.path.dirname(args.checkpoint)}/test_videos" # Might need modified if used
         print(f"Saving eval videos to {eval_output_dir}")
 
+        # Are these going to overwrite videos every run?
         if args.save_train_video_freq is not None:
             save_video_trigger = lambda x: (x // args.num_steps) % args.save_train_video_freq == 0
             envs = RecordEpisode(
@@ -84,7 +98,7 @@ if __name__ == "__main__":
         eval_reconfiguration_freq: int = 1
         control_mode: str = "pd_joint_delta_pos"
 
-    args = tyro.cli(Args)
+    args = tyro.cli(Args) # Is this supposed to be tyroty or is the import wrong?
     run_name = f"{args.env_id}_{int(time.time())}"
 
     envs, eval_envs = make_envs(args, run_name)
