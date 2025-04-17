@@ -75,7 +75,7 @@ class PPO:
             state = torch.FloatTensor(state).to(get_device())
             action, action_logprob, value = self.old_policy.act(state)
             action =to_numpy(action)
-        return action , action_logprob, value
+        return action
 
     
 
@@ -128,7 +128,7 @@ class PPO:
     def sample_replay_buffer(self, batch_size):
         return self.replay_buffer.sample_recent_data(batch_size, concat_rew=False)
     
-    def train_agent_singlebatch(self,):
+    def train_agent_singlebatch(self):
 
         print('\nTraining agent using sampled data from replay buffer...')
         all_logs = []
@@ -162,6 +162,10 @@ class PPO:
             loss.mean().backward()
             self.optimizer.step()
         self.policy_old.load_state_dict(self.policy.state_dict())
+        self.replay_buffer.clear()
+        return {
+            'Training Loss': to_numpy(loss),
+        }
 
 
             

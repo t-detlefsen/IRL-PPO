@@ -152,30 +152,25 @@ def calculate_q_vals( rewards_list,gamma,rtg:bool=True):
     return q_vals  # return an array
 
 
-def sample_trajectory(env, policy, max_path_length, render=False, render_mode=('rgb_array')):
+def sample_trajectory(env, policy, num_steps_per_rollout, render=False, render_mode=('rgb_array')):
     ob = env.reset()
     obs, acs, rewards, next_obs, terminals, image_obs = [], [], [], [], [], []
     steps = 0
     while True:
-        if render:  # feel free to ignore this for now
-            if 'rgb_array' in render_mode:
-                if hasattr(env.unwrapped, 'sim'):
-                    if 'track' in env.unwrapped.model.camera_names:
-                        image_obs.append(env.unwrapped.sim.render(camera_name='track', height=500, width=500)[::-1])
-                    else:
-                        image_obs.append(env.unwrapped.sim.render(height=500, width=500)[::-1])
-                else:
-                    image_obs.append(env.render(mode=render_mode))
-            if 'human' in render_mode:
-                env.render(mode=render_mode)
-                time.sleep(env.model.opt.timestep)
-
-        #  get this from hw1
-
+        # if render:  # feel free to ignore this for now
+        #     if 'rgb_array' in render_mode:
+        #         if hasattr(env.unwrapped, 'sim'):
+        #             if 'track' in env.unwrapped.model.camera_names:
+        #                 image_obs.append(env.unwrapped.sim.render(camera_name='track', height=500, width=500)[::-1])
+        #             else:
+        #                 image_obs.append(env.unwrapped.sim.render(height=500, width=500)[::-1])
+        #         else:
+        #             image_obs.append(env.render(mode=render_mode))
+        #     if 'human' in render_mode:
+        #         env.render(mode=render_mode)
+        #         time.sleep(env.model.opt.timestep)
         obs.append(ob)
-      
-        ac = policy.get_action(ob)[0]# HINT: query the policy's get_action function [OK]
-   
+        ac = policy.select_action(ob)[0]# HINT: query the policy's get_action function [OK]
         acs.append(ac)
 
         # take that action and record results
@@ -188,7 +183,7 @@ def sample_trajectory(env, policy, max_path_length, render=False, render_mode=('
 
        
         # HINT: rollout can end due to done, or due to max_path_length
-        if (done==True) or (steps>=max_path_length):
+        if (done==True) or (steps>=num_steps_per_rollout):
             rollout_done = 1 
         else:
             rollout_done = 0

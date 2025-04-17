@@ -1,11 +1,40 @@
-
+from torch.utils.tensorboard import SummaryWriter
 from utils import *
 from ppo_agent import PPO
 from mani_skill.utils.wrappers.flatten import FlattenActionSpaceWrapper
 from mani_skill.utils.wrappers.record import RecordEpisode
 from mani_skill.vector.wrappers.gymnasium import ManiSkillVectorEnv
-import os
+
 import gymnasium as gym
+
+def getEnvs(args):
+        
+    env_kwargs = dict(obs_mode="state", render_mode="rgb_array", sim_backend="physx_cuda")
+    # if args.control_mode is not None:
+    #     env_kwargs["control_mode"] = args.control_mode
+    envs = gym.make(args.env_id, num_envs=args.num_envs if not args.evaluate else 1, reconfiguration_freq=args.reconfiguration_freq, **env_kwargs)
+    eval_envs = gym.make(args.env_id, num_envs=args.num_eval_envs, reconfiguration_freq=args.eval_reconfiguration_freq, **env_kwargs)
+    if isinstance(envs.action_space, gym.spaces.Dict):
+        envs = FlattenActionSpaceWrapper(envs)
+        eval_envs = FlattenActionSpaceWrapper(eval_envs)
+    if args.capture_video:
+        eval_output_dir = f"runs/{args.run_name}/videos"
+        print(f"Saving eval videos to {eval_output_dir}")
+       
+        eval_envs = RecordEpisode(eval_envs, output_dir=eval_output_dir, save_trajectory=args.evaluate, trajectory_name="trajectory", max_steps_per_video=args.num_eval_steps, video_fps=30)
+    envs = ManiSkillVectorEnv(envs, args.num_envs, ignore_terminations=not args.partial_reset, record_metrics=True)
+    eval_envs = ManiSkillVectorEnv(eval_envs, args.num_eval_envs, ignore_terminations=not args.eval_partial_reset, record_metrics=True)
+    assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
+    return envs, eval_envs
+
+class Logger:
+    def __init__(self, tensorboard: SummaryWriter = None) -> None:
+        self.writer = tensorboard
+    def add_scalar(self, tag, scalar_value, step):
+        self.writer.add_scalar(tag, scalar_value, step)
+    def close(self):
+        self.writer.close()
+
 class PPO_trainer(object):
     '''
     Train an RL agent using PPO
@@ -15,7 +44,7 @@ class PPO_trainer(object):
         set_random_seeds(args.seed)
         init_gpu()
 
-       
+        self.args=args
         self.envs , self.eval_envs = getEnvs(args)
         self.ppo_agent = PPO(args,
             obs_dim=self.envs.single_observation_space.shape[0],
@@ -23,8 +52,23 @@ class PPO_trainer(object):
             log_std=-0.5,
             )
         self.num_training_iter= args.num_iterations
-        # TODO: Setup environment
+        self.num_steps_per_rollout=args.num_steps_per_rollout
 
+        writer = SummaryWriter(f"runs/{args.run_name}")
+        self.logger=Logger(writer)
+
+    def collect_training_trajectories(self, collect_policy, batch_size):
+
+        print("\nCollecting data to be used for training...")
+        
+        training_trajs,envsteps_this_batch= sample_trajectories(env=self.envs,
+                                                                policy=collect_policy,
+                                                                min_timesteps_per_batch=batch_size,
+                                                                max_path_length=self.num_steps_per_rollout
+                                                                )
+        
+
+        return training_trajs, envsteps_this_batch
     def run_training_loop(self):
         '''
         Train the RL agent usng PPO
@@ -46,89 +90,43 @@ class PPO_trainer(object):
                     # TODO: Interact w/ environment
                 # TODO: Evaluate performance
                 # TODO: Save model?
+        total_env_steps=0
         for iteration in range(1, self.num_training_iter + 1):
-            self.ppo_agent.train_agent_singlebatch()
+            print("\n\n********** Iteration %i ************"%iteration)
+            paths, env_steps_thisbatch = self.collect_training_trajectories(env=self.envs,
+                                                                            collect_policy=self.ppo_agent,
+                                                                            batch_size=self.ppo_agent.train_batch_size
+                                                                            )
+            
+            total_env_steps +=env_steps_thisbatch
+            self.ppo_agent.add_to_replay_buffer(paths)
+            train_log = self.ppo_agent.train_agent_singlebatch()
 
-        pass
+            #EVALUATION
+            with torch.no_grad():
+                eval_trajs,_= sample_trajectories(env=self.eval_envs,
+                                                                policy=self.ppo_agent,
+                                                                min_timesteps_per_batch=self.args.eval_minibatch_size,
+                                                                max_path_length=self.num_eval_steps
+                                                                )
+                eval_rwds=[eval_traj["reward"].sum() for eval_traj in eval_trajs]
 
-def getEnvs(args):
+                self.logger.add_scalar(tag="Eval_AverageReturn", scalar_value=np.mean(eval_rwds),step=iteration)
+                self.logger.add_scalar(tag="Eval_StdReturn", scalar_value=np.std(eval_rwds),step=iteration)
+
+    def close_envs(self):
+        self.envs.close()
+        self.eval_envs.close()
+    def close_logger(self):
+        self.logger.close()
+
+                
+
+
+
+        
+
     
-    env_kwargs = dict(obs_mode="state", render_mode="rgb_array", sim_backend="physx_cuda")
-    # if args.control_mode is not None:
-    #     env_kwargs["control_mode"] = args.control_mode
-    envs = gym.make(args.env_id, num_envs=args.num_envs if not args.evaluate else 1, reconfiguration_freq=args.reconfiguration_freq, **env_kwargs)
-    eval_envs = gym.make(args.env_id, num_envs=args.num_eval_envs, reconfiguration_freq=args.eval_reconfiguration_freq, **env_kwargs)
-    if isinstance(envs.action_space, gym.spaces.Dict):
-        envs = FlattenActionSpaceWrapper(envs)
-        eval_envs = FlattenActionSpaceWrapper(eval_envs)
-    if args.capture_video:
-        eval_output_dir = f"runs/{args.run_name}/videos"
-        if args.evaluate:
-            eval_output_dir = f"{os.path.dirname(args.checkpoint)}/test_videos"
-        print(f"Saving eval videos to {eval_output_dir}")
-        # if args.save_train_video_freq is not None:
-        #     save_video_trigger = lambda x : (x // args.num_steps) % args.save_train_video_freq == 0
-        #     envs = RecordEpisode(envs, output_dir=f"runs/{run_name}/train_videos", save_trajectory=False, save_video_trigger=save_video_trigger, max_steps_per_video=args.num_steps, video_fps=30)
-        eval_envs = RecordEpisode(eval_envs, output_dir=eval_output_dir, save_trajectory=args.evaluate, trajectory_name="trajectory", max_steps_per_video=args.num_eval_steps, video_fps=30)
-    envs = ManiSkillVectorEnv(envs, args.num_envs, ignore_terminations=not args.partial_reset, record_metrics=True)
-    eval_envs = ManiSkillVectorEnv(eval_envs, args.num_eval_envs, ignore_terminations=not args.eval_partial_reset, record_metrics=True)
-    assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
-    return envs, eval_envs
 
 
 
-def run_training_loop(self, n_iter, collect_policy, eval_policy,
-                        initial_expertdata=None, relabel_with_expert=False,
-                        start_relabel_with_expert=1, expert_policy=None):
-    """
-    :param n_iter:  number of (dagger) iterations
-    :param collect_policy:
-    :param eval_policy:
-    :param initial_expertdata:
-    :param relabel_with_expert:  whether to perform dagger
-    :param start_relabel_with_expert: iteration at which to start relabel with expert
-    :param expert_policy:
-    """
-
-    # init vars at beginning of training
-    self.total_envsteps = 0
-    self.start_time = time.time()
-
-    for itr in range(n_iter):
-        print("\n\n********** Iteration %i ************"%itr)
-
-        # decide if videos should be rendered/logged at this iteration
-        if itr % self.params['video_log_freq'] == 0 and self.params['video_log_freq'] != -1:
-            self.log_video = True
-        else:
-            self.log_video = False
-
-        # decide if metrics should be logged
-        if self.params['scalar_log_freq'] == -1:
-            self.log_metrics = False
-        elif itr % self.params['scalar_log_freq'] == 0:
-            self.log_metrics = True
-        else:
-            self.log_metrics = False
-
-        # collect trajectories, to be used for training
-        training_returns = self.collect_training_trajectories(itr,
-                            initial_expertdata, collect_policy,
-                            self.params['batch_size'])
-        paths, envsteps_this_batch, train_video_paths = training_returns
-        self.total_envsteps += envsteps_this_batch
-
-        # add collected data to replay buffer
-        self.agent.add_to_replay_buffer(paths)
-
-        # train agent (using sampled data from replay buffer)
-        train_logs = self.train_agent()
-
-        # log/save
-        if self.log_video or self.log_metrics:
-            # perform logging
-            print('\nBeginning logging procedure...')
-            self.perform_logging(itr, paths, eval_policy, train_video_paths, train_logs)
-
-            if self.params['save_params']:
-                self.agent.save('{}/agent_itr_{}.pt'.format(self.params['logdir'], itr))

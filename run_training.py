@@ -80,20 +80,22 @@ class Args:
     """whether to let parallel environments reset upon termination instead of truncation"""
     reconfiguration_freq: Optional[int] = None
     """how often to reconfigure the environment during training"""
+    eval_minibatch_size: Optional[int] = None
+
     eval_reconfiguration_freq: Optional[int] = 1
     """for benchmarking purposes we want to reconfigure the eval environment each reset to ensure objects are randomized in some tasks"""
     eval_partial_reset: bool = False
     """whether to let parallel evaluation environments reset upon termination instead of truncation"""
     reward_to_go: bool = True
-    n_hl_actor: int =3,# num of hidden layers
-    hl_size_actor =256, # hidden layer sizes
-    activation_actor: str = 'tanh',
-    output_activation_actor: str = 'identity',
+    n_hl_actor: int =3# num of hidden layers
+    hl_size_actor =256 # hidden layer sizes
+    activation_actor: str = 'tanh'
+    output_activation_actor: str = 'identity'
     # Critic architecture
-    n_hl_critic: int =3,# num of hidden layers
-    hl_size_critic =256, # hidden layer sizes
+    n_hl_critic: int =3# num of hidden layers
+    hl_size_critic =256 # hidden layer sizes
     activation_critic: str = 'tanh',
-    output_activation_critic: str = 'identity',
+    output_activation_critic: str = 'identity'
 
     # to be filled in runtime
     batch_size: int = 0
@@ -112,6 +114,9 @@ def main():
     args.batch_size = int(args.num_envs * args.num_steps_per_rollout)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
+    if args.eval_minibatch_size is None:
+        args.eval_minibatch_size=args.minibatch_size
+
     if args.exp_name is None:
         args.exp_name = os.path.basename(__file__)[: -len(".py")]
         args.run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
