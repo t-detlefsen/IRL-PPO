@@ -224,21 +224,62 @@ class PPO:
         '''
         # TODO: Loop through buffer rewards backwards
             # TODO: Determine discounted reward + and add to list
+        rewards = []
+        device=self.device
+        discounted_reward = 0
+        old_states = torch.squeeze(torch.stack(self.buffer.states, dim=0)).detach().to(device)
+        old_actions = torch.squeeze(torch.stack(self.buffer.actions, dim=0)).detach().to(device)
+        old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0)).detach().to(device)
+        old_state_values = torch.squeeze(torch.stack(self.buffer.state_values, dim=0)).detach().to(device)
+
+        for reward, is_terminal in zip(reversed(self.buffer.rewards), reversed(self.buffer.is_terminals)):
+            if is_terminal:
+                discounted_reward = 0
+            discounted_reward = reward + (self.gamma * discounted_reward)
+            rewards.insert(0, discounted_reward)
 
         # TODO: Normalize rewards
+        rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
+        rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7)
 
         # TODO: Calculate Advantages
-
+        advantages = rewards.detach() - old_state_values.detach()
         # TODO: Loop through epochs
             # TODO: Evaluate policy on old policy states + actions
             # TODO: Calculate ratio
             # TODO: Calculate Surrogate Loss + Clip
             # TODO: Take gradient step
 
-        # TODO: Update old policy
-        # TODO: Clear replay buffer
 
-        pass
+        for _ in range(self.K_epochs):
+
+            # use the policy's critic to evaluate the state action pairs in the buffer
+            logprobs, state_values, dist_entropy = self.policy.evaluate(old_states, old_actions)
+            state_values = torch.squeeze(state_values)
+            
+            ###### LOSS CALCULATION ##########
+            ratios = torch.exp(logprobs - old_logprobs.detach())
+
+            # Finding Surrogate Loss  
+            surr1 = ratios * advantages
+            surr2 = torch.clamp(ratios, 1-self.eps_clip, 1+self.eps_clip) * advantages
+
+            # final loss of clipped objective PPO
+            policy_loss=-torch.min(surr1, surr2)
+            value_loss=self.MSE_loss(state_values, rewards)
+            entropy_loss=- 0.01 * dist_entropy
+            loss = (policy_loss+ 0.5 *value_loss +entropy_loss).mean()
+            
+            # take gradient step
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
+            
+        # the old_policy is updated with the updated policy's parameters
+        self.policy_old.load_state_dict(self.policy.state_dict())
+
+        # clear buffer to make PPO on policy
+        self.buffer.clear()
 
     def save(self, checkpoint_path):
         torch.save(self.policy_old.state_dict(), checkpoint_path)
