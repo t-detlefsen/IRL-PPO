@@ -155,6 +155,8 @@ def calculate_q_vals( rewards_list,gamma,rtg:bool=True):
 
 def sample_trajectory(env, policy, num_steps_per_rollout, seed:int):
     ob, _ = env.reset(seed=seed)
+    ob=to_numpy(ob)
+    print(ob)
     obs, acs, rewards, next_obs, terminals, image_obs = [], [], [], [], [], []
     steps = 0
     while True:
@@ -171,14 +173,14 @@ def sample_trajectory(env, policy, num_steps_per_rollout, seed:int):
         #         env.render(mode=render_mode)
         #         time.sleep(env.model.opt.timestep)
         obs.append(ob)
-        ac_multi = policy.select_action(ob)# HINT: query the policy's get_action function [OK]
+        ac = policy.select_action(ob)# HINT: query the policy's get_action function [OK]
         #print ("multi action size= ",ac_multi.shape)
        
         
-        acs.append(ac_multi)
+        acs.append(ac)
 
         # take that action and record results
-        ob, rew, done,_,info = env.step(ac_multi)
+        ob, rew, done,_,_ = env.step(ac)
 
         # record result of taking that action
         steps += 1
@@ -187,7 +189,7 @@ def sample_trajectory(env, policy, num_steps_per_rollout, seed:int):
 
        
         # HINT: rollout can end due to max_path_length
-        if (steps>=num_steps_per_rollout):
+        if (steps>=num_steps_per_rollout) or (done==True):
             rollout_done = 1 
         else:
             rollout_done = 0

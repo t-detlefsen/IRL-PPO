@@ -51,15 +51,17 @@ class ActorCritic(nn.Module):
         action_means= self.actor(observation) # the mean action from each observation in the batch
         std = torch.exp(self.logstd).to(action_means.device)
         std = std.expand_as(action_means)
-        batch_size=action_means.shape[0]
+
+        n_envs=action_means.shape[0]
+        #print("action_means shape: ", action_means.shape)
         #print(action_means.shape)
         covariance_matrix = torch.diag_embed(std)
 
-        batch_covariance_matrix= covariance_matrix.expand(batch_size, -1, -1)
+        env_covariance_matrix= covariance_matrix.expand(n_envs, -1, -1)
 #repeats the matrix so each batch has its own covariance matrix
         #print(batch_covariance_matrix.shape)
         action_dist_out = distributions.MultivariateNormal(action_means.to(get_device()),
-                                                           scale_tril = batch_covariance_matrix.to(get_device()))
+                                                           scale_tril = env_covariance_matrix.to(get_device()))
         return action_dist_out
 
 

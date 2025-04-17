@@ -30,7 +30,7 @@ class Args:
     """the learning rate of the optimizer"""
     learning_rate_critic: float = 3e-4
     """the learning rate of the optimizer"""
-    num_envs: int = 512
+    num_envs: int = 1
     """the number of parallel environments"""
     num_steps_per_rollout: int = 50
     """the number of steps to run in each environment per policy rollout"""
@@ -63,9 +63,9 @@ class Args:
     save_train_video_freq: Optional[int] = None
     evaluate: bool = False
     """if toggled, only runs evaluation with the given model checkpoint and saves the evaluation trajectories"""
-    num_eval_envs: int = 8
+    num_eval_envs: int = 1
     """the number of parallel evaluation environments"""
-    partial_reset: bool = True
+    partial_reset: bool = False
     """whether to let parallel environments reset upon termination instead of truncation"""
     reconfiguration_freq: Optional[int] = None
     """how often to reconfigure the environment during training"""

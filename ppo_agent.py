@@ -3,6 +3,8 @@ from torch import nn
 from actor_critic import ActorCritic
 from replay_buffer import ReplayBuffer
 from utils import *
+#from torchviz import make_dot
+
 
 
 class PPO:
@@ -58,7 +60,7 @@ class PPO:
                         {'params': self.policy.actor.parameters(), 'lr': self.lr_actor},
                         {'params': self.policy.critic.parameters(), 'lr': self.lr_critic}])
 
-    def select_action(self, state: torch.tensor) -> torch.tensor:
+    def select_action(self, state: np.array) -> np.array:
         '''
         Select an action using the agent
 
@@ -73,8 +75,9 @@ class PPO:
         # TODO: Return action
         #print(state)
         with torch.no_grad():
-            state = state.float().to(get_device())
-            action, action_logprob, value = self.old_policy.act(state)
+            print("in select action", state)
+            state = from_numpy(state)
+            action, _, _ = self.old_policy.act(state)
             action =to_numpy(action)
         return action
 
@@ -89,14 +92,15 @@ class PPO:
         # Estimate the advantage ,
         # by querying the neural network that you're using to learn the value function
         obs= from_numpy(obs)
-        values_normalized = self.policy.critic(obs).squeeze(-1)
+        with torch.no_grad():
+            values_normalized = self.policy.critic(obs).squeeze(-1)
         values_normalized = values_normalized.reshape(-1) 
-        print("q_val shape= ", q_values.shape)
-        print("qval_ndim= ",q_values.ndim)
-        print("q_val type= ", type(q_values))
-        print("values_normalized_shape= ", values_normalized.shape)
-        print("values_normalized_ndim= ", values_normalized.ndim)
-        print("values_normalized type= ", type(values_normalized))
+        # print("q_val shape= ", q_values.shape)
+        # print("qval_ndim= ",q_values.ndim)
+        # print("q_val type= ", type(q_values))
+        # print("values_normalized_shape= ", values_normalized.shape)
+        # print("values_normalized_ndim= ", values_normalized.ndim)
+        # print("values_normalized type= ", type(values_normalized))
         assert values_normalized.ndim == q_values.ndim
 
         
@@ -115,6 +119,7 @@ class PPO:
             ## create empty numpy array to populate with GAE advantage
             ## estimates, with dummy T+1 value for simpler recursive calculation
             batch_size = obs.shape[0] #Equal to T
+            #print("batchsize= " , batch_size)
             advantages = np.zeros_like(q_values)
 
             for i in reversed(range(batch_size)):
@@ -144,7 +149,7 @@ class PPO:
         print('\nTraining agent using sampled data from replay buffer...')
         all_logs = []
        # Collects batch of data from replay buffer
-        ob_batch, ac_batch, re_batch, next_ob_batch, terminal_batch = self.sample_replay_buffer(self.train_batch_size)
+        ob_batch, ac_batch, re_batch, _, terminal_batch = self.sample_replay_buffer(self.train_batch_size)
        
         q_vals= calculate_q_vals(rewards_list=re_batch,
                                     gamma=self.gamma,
@@ -166,34 +171,54 @@ class PPO:
         ac_batch = from_numpy(ac_batch)
         
         re_batch = np.array(re_batch)
+        re_batch = re_batch.reshape(-1)
         re_batch=from_numpy(re_batch)
-        print("re_batch shape = ", re_batch.shape)
+        re_batch=torch.squeeze(re_batch)
+        re_batch=re_batch.detach()
+        #print("re_batch shape = ", re_batch.shape)
         advantages = from_numpy(advantages)
         
         all_logs = []
         for train_step in range(self.K_epochs):
-            logprobs, state_values, dist_entropy = self.policy.evaluate(observation=ob_batch, action=ac_batch)
-            logprobs_old, state_values_old, dist_entropy_old = self.old_policy.evaluate(observation=ob_batch, action=ac_batch)
+            logprobs, state_values, dist_entropy = self.policy.evaluate(observation=ob_batch, 
+                                                                        action=ac_batch
+                                                                                                )
 
-            state_values = torch.squeeze(state_values)
+            with torch.no_grad():
+                logprobs_old, _, _ = self.old_policy.evaluate(observation=ob_batch, action=ac_batch)
+          
+
+            
             ratios = torch.exp(logprobs - logprobs_old)
-
+            #print("state_ values shape= ", state_values.shape)
             # Finding Surrogate Loss  
             surr1 = ratios * advantages
             surr2 = torch.clamp(ratios, 1-self.clip_epsilon, 1+self.clip_epsilon) * advantages
 
             # final loss of clipped objective PPO
-            loss = -torch.min(surr1, surr2) + 0.5 * self.MSE_loss(state_values, re_batch) - 0.01 * dist_entropy
+            policy_loss=-torch.min(surr1, surr2)
+            value_loss=self.MSE_loss(state_values.squeeze(-1), re_batch)
+            entropy_loss=- 0.01 * dist_entropy
             
-            # take gradient step
+            loss = (policy_loss+ 0.5 *value_loss +entropy_loss).mean()
+            
+         
             self.optimizer.zero_grad()
-            loss.mean().backward()
+            loss.backward()
             self.optimizer.step()
+
+
+            # logprobs.detach_()
+            # state_values=state_values.detach()
+            # dist_entropy=dist_entropy.detach()
+            loss_np=to_numpy(loss)
+            del policy_loss, value_loss, entropy_loss, ratios, loss,
+            del logprobs, state_values, dist_entropy, logprobs_old, surr1, surr2
+            
+
         self.old_policy.load_state_dict(self.policy.state_dict())
         self.replay_buffer.clear()
-        return {
-            'Training Loss': to_numpy(loss),
-        }
+       
 
 
             

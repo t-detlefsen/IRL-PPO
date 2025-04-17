@@ -101,7 +101,7 @@ class PPO_trainer(object):
             
             total_env_steps +=env_steps_thisbatch
             self.ppo_agent.add_to_replay_buffer(paths)
-            train_log = self.ppo_agent.train_agent_singlebatch()
+            self.ppo_agent.train_agent_singlebatch()
 
             #EVALUATION
             with torch.no_grad():
