@@ -60,7 +60,7 @@ class PPO:
                         {'params': self.policy.actor.parameters(), 'lr': self.lr_actor},
                         {'params': self.policy.critic.parameters(), 'lr': self.lr_critic}])
 
-    def select_action(self, state: np.array) -> np.array:
+    def get_action_and_value(self, state: np.array) -> np.array:
         '''
         Select an action using the agent
 
@@ -75,15 +75,12 @@ class PPO:
         # TODO: Return action
         #print(state)
         with torch.no_grad():
-            print("in select action", state)
-            state = from_numpy(state)
-            action, _, _ = self.old_policy.act(state)
-            action =to_numpy(action)
-        return action
+            action, _, value = self.old_policy.act(state)
+        return action,value
 
     
 
-    def estimate_advantage(self, obs, rewards_list, q_values, terminals):
+    def estimate_advantage(self, obs,val, rewards_list, q_values, terminals):
 
         """
             Computes advantages by (possibly) using GAE, or subtracting a baseline from the estimated Q values
@@ -91,43 +88,32 @@ class PPO:
 
         # Estimate the advantage ,
         # by querying the neural network that you're using to learn the value function
-        obs= from_numpy(obs)
-        with torch.no_grad():
-            values_normalized = self.policy.critic(obs).squeeze(-1)
-        values_normalized = values_normalized.reshape(-1) 
-        # print("q_val shape= ", q_values.shape)
-        # print("qval_ndim= ",q_values.ndim)
-        # print("q_val type= ", type(q_values))
-        # print("values_normalized_shape= ", values_normalized.shape)
-        # print("values_normalized_ndim= ", values_normalized.ndim)
-        # print("values_normalized type= ", type(values_normalized))
+      
+        values_normalized = val
+        print("val shape: ",val.shape)
+        print("q_val shape= ",q_values.shape)
         assert values_normalized.ndim == q_values.ndim
 
-        
-        values = unnormalize(values_normalized, q_values.mean(), q_values.std()).detach().cpu().numpy()
+        values = unnormalize(values_normalized, q_values.mean(), q_values.std())
 
-        
-        
-        
         if self.gae_lambda is not None:
             ## append a dummy T+1 value for simpler recursive calculation
             values = np.append(values, [0])
 
             ## combine rews_list into a single array
-            rewards_flat = np.concatenate(rewards_list).reshape(-1)
-            print(rewards_flat.shape)
+            rewards_flat = np.concatenate(rewards_list)
             ## create empty numpy array to populate with GAE advantage
             ## estimates, with dummy T+1 value for simpler recursive calculation
             batch_size = obs.shape[0] #Equal to T
-            #print("batchsize= " , batch_size)
-            advantages = np.zeros_like(q_values)
+            
+            advantages = np.zeros_like(values)
 
             for i in reversed(range(batch_size)):
 
                 non_terminal_flag=1-terminals[i]#0 when its the last in its trajectory
                 TD_error= rewards_flat[i] + self.gamma *non_terminal_flag* values[i+1] - values[i] #temporal difference error / delta in the hw pdf
                 advantages[i] = TD_error + self.gamma * self.gae_lambda * non_terminal_flag * advantages[i+1] #recursive calculation of the advantage form pdf. non_terminal_flag ensures advantages arent used at ends of trajectories
-            #advantages = advantages[:-1]
+            advantages = advantages[:-1]
 
         else:
         
@@ -147,65 +133,63 @@ class PPO:
     def train_agent_singlebatch(self):
 
         print('\nTraining agent using sampled data from replay buffer...')
-        all_logs = []
+
        # Collects batch of data from replay buffer
-        ob_batch, ac_batch, re_batch, _, terminal_batch = self.sample_replay_buffer(self.train_batch_size)
+        observations, actions,vals, rwds, terminals = self.sample_replay_buffer(self.train_batch_size)
        
-        q_vals= calculate_q_vals(rewards_list=re_batch,
+        q_vals= calculate_q_vals(rewards_list=rwds,
                                     gamma=self.gamma,
                                     rtg=self.reward_to_go)
-        advantages = self.estimate_advantage(obs=ob_batch,
-                                                rewards_list=re_batch,
-                                                q_values=q_vals,
-                                                terminals=terminal_batch)
-        T, N, obs_dim  = ob_batch.shape      # (50, 112, obs_dim)  for example
-        _, _, act_dim  = ac_batch.shape
-        ob_batch       = ob_batch.reshape(-1, obs_dim)
-        ac_batch       = ac_batch.reshape(-1, act_dim)
-        advantages     = advantages.reshape(-1)
-        q_vals         = q_vals.reshape(-1)
-        terminal_batch = terminal_batch.reshape(-1)
-
-
-        ob_batch = from_numpy(ob_batch)
-        ac_batch = from_numpy(ac_batch)
+        advantages = self.estimate_advantage(obs=observations,
+                                             val=vals,
+                                            rewards_list=rwds,
+                                            q_values=q_vals,
+                                            terminals=terminals)
         
-        re_batch = np.array(re_batch)
-        re_batch = re_batch.reshape(-1)
-        re_batch=from_numpy(re_batch)
-        re_batch=torch.squeeze(re_batch)
-        re_batch=re_batch.detach()
-        #print("re_batch shape = ", re_batch.shape)
-        advantages = from_numpy(advantages)
+        advantages=from_numpy(advantages).detach()
+        rwds=from_numpy(rwds[0]).detach()
+      
         
-        all_logs = []
         for train_step in range(self.K_epochs):
-            logprobs, state_values, dist_entropy = self.policy.evaluate(observation=ob_batch, 
-                                                                        action=ac_batch
-                                                                                                )
+            logprobs, state_values, dist_entropy = self.policy.evaluate(observation=observations, 
+                                                                        action=actions)
 
             with torch.no_grad():
-                logprobs_old, _, _ = self.old_policy.evaluate(observation=ob_batch, action=ac_batch)
-          
+                logprobs_old, _, _ = self.old_policy.evaluate(observation=observations, action=actions)
 
-            
             ratios = torch.exp(logprobs - logprobs_old)
-            #print("state_ values shape= ", state_values.shape)
+      
             # Finding Surrogate Loss  
             surr1 = ratios * advantages
             surr2 = torch.clamp(ratios, 1-self.clip_epsilon, 1+self.clip_epsilon) * advantages
 
             # final loss of clipped objective PPO
-            policy_loss=-torch.min(surr1, surr2)
-            value_loss=self.MSE_loss(state_values.squeeze(-1), re_batch)
-            entropy_loss=- 0.01 * dist_entropy
+           
             
-            loss = (policy_loss+ 0.5 *value_loss +entropy_loss).mean()
-            
+            loss = (-torch.min(surr1, surr2)+ 0.5 *self.MSE_loss(state_values.squeeze(), rwds) - 0.01 * dist_entropy).mean()
+
+
+           
+            # print("\n[DEBUG] grad_fn check before backward:")
+            # print("logprobs grad_fn:", logprobs.grad_fn)
+            # print("logprobs_old grad_fn:", logprobs_old.grad_fn)
+            # print("state_values grad_fn:", state_values.grad_fn)
+            # print("dist_entropy grad_fn:", dist_entropy.grad_fn)
+            # print("advantages grad_fn:", advantages.grad_fn if hasattr(advantages, "grad_fn") else "N/A (likely detached)")
+            # print("rwds grad_fn:", rwds.grad_fn if hasattr(rwds, "grad_fn") else "N/A (likely detached)")
+            # print("policy_loss grad_fn:", policy_loss.grad_fn)
+            # print("value_loss grad_fn:", value_loss.grad_fn)
+            # print("entropy_loss grad_fn:", entropy_loss.grad_fn)
+            # print("loss grad_fn:", loss.grad_fn)
+            # print("dist_entropy:", dist_entropy.grad_fn)
+
+
          
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
+
+       
 
         self.old_policy.load_state_dict(self.policy.state_dict())
         self.replay_buffer.clear()

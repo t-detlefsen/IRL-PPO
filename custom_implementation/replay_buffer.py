@@ -12,8 +12,8 @@ class ReplayBuffer(object):
         self.acs = None
         self.concatenated_rews = None
         self.unconcatenated_rews = None
-        self.next_obs = None
         self.terminals = None
+        self.values=None
 
     def add_rollouts(self, paths):
 
@@ -22,21 +22,21 @@ class ReplayBuffer(object):
             self.paths.append(path)
 
         # convert new rollouts into their component arrays, and append them onto our arrays
-        observations, actions, next_observations, terminals, concatenated_rews, unconcatenated_rews = convert_listofrollouts(paths)
+        observations, actions, values, terminals, concatenated_rews, unconcatenated_rews = convert_listofrollouts(paths)
 
-
+        
         if self.obs is None:
             self.obs = observations[-self.max_size:]
             self.acs = actions[-self.max_size:]
-            self.next_obs = next_observations[-self.max_size:]
             self.terminals = terminals[-self.max_size:]
             self.concatenated_rews = concatenated_rews[-self.max_size:]
             self.unconcatenated_rews = unconcatenated_rews[-self.max_size:]
+            self.values=values[-self.max_size:]
         else:
             self.obs = np.concatenate([self.obs, observations])[-self.max_size:]
             self.acs = np.concatenate([self.acs, actions])[-self.max_size:]
-            self.next_obs = np.concatenate(
-                [self.next_obs, next_observations]
+            self.values = np.concatenate(
+                [self.values, values]
             )[-self.max_size:]
             self.terminals = np.concatenate(
                 [self.terminals, terminals]
@@ -52,30 +52,13 @@ class ReplayBuffer(object):
     ########################################
     ########################################
 
-    def sample_random_rollouts(self, num_rollouts):
-        rand_indices = np.random.permutation(len(self.paths))[:num_rollouts]
-        return self.paths[rand_indices]
 
-    def sample_recent_rollouts(self, num_rollouts=1):
-        return self.paths[-num_rollouts:]
-
-    ########################################
-    ########################################
-
-    def sample_random_data(self, batch_size):
-        # get this from hw1
-        rand_idx=np.random.permutation(self.obs.shape[0])[:batch_size]
-        obs_samp = self.obs[rand_idx]
-        acs_samp = self.acs[rand_idx]
-        rews_samp = self.concatenated_rews[rand_idx]
-        next_obs_samp = self.next_obs[rand_idx]
-        terminals_samp = self.terminals[rand_idx]
-        return obs_samp, acs_samp, rews_samp, next_obs_samp, terminals_samp
+ 
 
     def sample_recent_data(self, batch_size=1, concat_rew=True):
 
         if concat_rew:
-            return self.obs[-batch_size:], self.acs[-batch_size:], self.concatenated_rews[-batch_size:], self.next_obs[-batch_size:], self.terminals[-batch_size:]
+            return self.obs[-batch_size:], self.acs[-batch_size:],self.values[-batch_size:], self.concatenated_rews[-batch_size:], self.terminals[-batch_size:]
         else:
             num_recent_rollouts_to_return = 0
             num_datapoints_so_far = 0
@@ -86,13 +69,15 @@ class ReplayBuffer(object):
                 num_recent_rollouts_to_return +=1
                 num_datapoints_so_far += get_pathlength(recent_rollout)
             rollouts_to_return = self.paths[-num_recent_rollouts_to_return:]
-            observations, actions, next_observations, terminals, concatenated_rews, unconcatenated_rews = convert_listofrollouts(rollouts_to_return)
-            return observations, actions, unconcatenated_rews, next_observations, terminals
-    def clear(self):
+            observations, actions, values, terminals, concatenated_rews, unconcatenated_rews = convert_listofrollouts(rollouts_to_return)
+            return observations, actions,values, unconcatenated_rews, terminals
+        
+    def clear(self,max_size=1000000):
+        self.max_size = max_size
         self.paths = []
         self.obs = None
         self.acs = None
         self.concatenated_rews = None
         self.unconcatenated_rews = None
-        self.next_obs = None
         self.terminals = None
+        self.values=None

@@ -47,25 +47,19 @@ class ActorCritic(nn.Module):
         self.critic.to(get_device())
 
     def forward(self, observation: torch.FloatTensor):
-        #print(observation.shape)
+       
         action_means= self.actor(observation) # the mean action from each observation in the batch
         std = torch.exp(self.logstd).to(action_means.device)
         std = std.expand_as(action_means)
 
-        n_envs=action_means.shape[0]
-        #print("action_means shape: ", action_means.shape)
-        #print(action_means.shape)
         covariance_matrix = torch.diag_embed(std)
 
-        env_covariance_matrix= covariance_matrix.expand(n_envs, -1, -1)
-#repeats the matrix so each batch has its own covariance matrix
-        #print(batch_covariance_matrix.shape)
         action_dist_out = distributions.MultivariateNormal(action_means.to(get_device()),
-                                                           scale_tril = env_covariance_matrix.to(get_device()))
+                                                           scale_tril = covariance_matrix.to(get_device()))
         return action_dist_out
 
 
-    def act(self, obs: torch.tensor): 
+    def act(self, obs: np.array): 
         '''
         Select action given current state
 
@@ -82,19 +76,21 @@ class ActorCritic(nn.Module):
         # TODO: Get log probabilities
         # TODO: Query Critic for state values
         # TODO: Return action, probs, states
-
+        
         if len(obs.shape) > 1:
             observation = obs
         else:
             observation = obs[None]
+        observation=from_numpy(obs)
         
         dist_action= self.forward(observation=observation)
         
         action = dist_action.sample()
-        action_logprob= dist_action.log_prob(action)
-        value = self.critic(observation)
+        action_logprob= to_numpy(dist_action.log_prob(action)).reshape(-1)
+        value = to_numpy(self.critic(observation)).item()
+        action=to_numpy(action).reshape(-1)
 
-        return action.detach(), action_logprob.detach(), value.detach()
+        return action, action_logprob, value
 
     def evaluate(self, observation, action):
         '''
@@ -114,6 +110,9 @@ class ActorCritic(nn.Module):
         # TODO: Get distribution entropy
         # TODO: Query critic for state values
         # TODO: Return probs, states, entropy
+        observation=from_numpy(observation)
+        action=from_numpy(action)
+
         dist_action= self.forward(observation)
         act_logprob= dist_action.log_prob(action)
         values= self.critic(observation)

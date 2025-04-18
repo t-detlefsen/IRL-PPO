@@ -57,12 +57,12 @@ class PPO_trainer(object):
         writer = SummaryWriter(f"runs/{args.run_name}")
         self.logger=Logger(writer)
 
-    def collect_training_trajectories(self, collect_policy, batch_size):
+    def collect_training_trajectories(self, agent, batch_size):
 
         print("\nCollecting data to be used for training...")
         
         training_trajs,envsteps_this_batch= sample_trajectories(env=self.envs,
-                                                                policy=collect_policy,
+                                                                agent=agent,
                                                                 min_timesteps_per_batch=batch_size,
                                                                 max_path_length=self.num_steps_per_rollout,
                                                                 seed=self.args.seed
@@ -95,7 +95,7 @@ class PPO_trainer(object):
         for iteration in range(1, self.num_training_iter + 1):
             print("\n\n********** Iteration %i ************"%iteration)
             paths, env_steps_thisbatch = self.collect_training_trajectories(
-                                                                            collect_policy=self.ppo_agent,
+                                                                            agent=self.ppo_agent,
                                                                             batch_size=self.ppo_agent.train_batch_size
                                                                             )
             
