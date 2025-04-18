@@ -207,15 +207,6 @@ class PPO:
             loss.backward()
             self.optimizer.step()
 
-
-            # logprobs.detach_()
-            # state_values=state_values.detach()
-            # dist_entropy=dist_entropy.detach()
-            loss_np=to_numpy(loss)
-            del policy_loss, value_loss, entropy_loss, ratios, loss,
-            del logprobs, state_values, dist_entropy, logprobs_old, surr1, surr2
-            
-
         self.old_policy.load_state_dict(self.policy.state_dict())
         self.replay_buffer.clear()
        

@@ -181,6 +181,9 @@ def sample_trajectory(env, policy, num_steps_per_rollout, seed:int):
 
         # take that action and record results
         ob, rew, done,_,_ = env.step(ac)
+        print(ob)
+        print(rew)
+        print(done)
 
         # record result of taking that action
         steps += 1
