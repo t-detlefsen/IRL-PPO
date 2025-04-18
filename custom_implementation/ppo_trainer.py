@@ -106,9 +106,10 @@ class PPO_trainer(object):
             #EVALUATION
             with torch.no_grad():
                 eval_trajs,_= sample_trajectories(env=self.eval_envs,
-                                                                policy=self.ppo_agent,
+                                                                agent=self.ppo_agent,
                                                                 min_timesteps_per_batch=self.args.eval_minibatch_size,
-                                                                max_path_length=self.num_eval_steps
+                                                                max_path_length=self.args.num_eval_steps,
+                                                                seed=self.args.seed
                                                                 )
                 eval_rwds=[eval_traj["reward"].sum() for eval_traj in eval_trajs]
 

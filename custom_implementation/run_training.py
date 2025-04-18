@@ -40,7 +40,7 @@ class Args:
     """the discount factor gamma"""
     gae_lambda: float = 0.9
     """the lambda for the general advantage estimation"""
-    num_minibatches: int = 32
+    num_minibatches: int = 10
     """the number of mini-batches"""
     K_epochs: int = 4
     """the K epochs to update the policy"""
@@ -103,6 +103,7 @@ if __name__ == "__main__":
     args.batch_size = int(args.num_envs * args.num_steps_per_rollout)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
+    print("n_iters= ", args.num_iterations)
     if args.eval_minibatch_size is None:
         args.eval_minibatch_size=args.minibatch_size
 
