@@ -35,7 +35,8 @@ class PPO:
         self.act_dim=act_dim
         self.lr_actor=args.learning_rate_actor
         self.lr_critic=args.learning_rate_critic
-        self.train_batch_size=args.minibatch_size
+        self.train_minibatch_size=args.minibatch_size
+        self.batch_size=args.batch_size
         self.reward_to_go=args.reward_to_go
 
         
@@ -90,8 +91,7 @@ class PPO:
         # by querying the neural network that you're using to learn the value function
       
         values_normalized = val
-        print("val shape: ",val.shape)
-        print("q_val shape= ",q_values.shape)
+       
         assert values_normalized.ndim == q_values.ndim
 
         values = unnormalize(values_normalized, q_values.mean(), q_values.std())
@@ -134,46 +134,58 @@ class PPO:
 
         print('\nTraining agent using sampled data from replay buffer...')
 
-       # Collects batch of data from replay buffer
-        observations, actions,vals, rwds, terminals = self.sample_replay_buffer(self.train_batch_size)
+       # Collects batch of data from replay buffer. This emptys the buffer out
+        batch_observations, batch_actions,batch_vals, batch_rwds, batch_terminals = self.sample_replay_buffer(self.batch_size)
        
-        q_vals= calculate_q_vals(rewards_list=rwds,
-                                    gamma=self.gamma,
-                                    rtg=self.reward_to_go)
-        advantages = self.estimate_advantage(obs=observations,
-                                             val=vals,
-                                            rewards_list=rwds,
-                                            q_values=q_vals,
-                                            terminals=terminals)
+        batch_q_vals= calculate_q_vals(rewards_list=batch_rwds,
+                                         gamma=self.gamma,
+                                         rtg=self.reward_to_go)
+        batch_advantages = self.estimate_advantage(obs=batch_observations,
+                                                  val=batch_vals,
+                                                  rewards_list=batch_rwds,
+                                                q_values=batch_q_vals,
+                                                  terminals=batch_terminals)
         
-        advantages=from_numpy(advantages).detach()
-        rwds=from_numpy(rwds[0]).detach()
-        with torch.no_grad():
-            logprobs_old, _, _ = self.old_policy.evaluate(observation=from_numpy(observations).detach(), 
-                                                          action=from_numpy(actions).detach())
-        actions=from_numpy(actions).detach()
-        
+        batch_advantages=from_numpy(batch_advantages).detach()
+        batch_returns= from_numpy(batch_q_vals).detach()
+        batch_actions=from_numpy(batch_actions).detach()
+
         for train_step in range(self.K_epochs):
-            if isinstance(observations, np.ndarray):
-                observations=from_numpy(observations)
-            
-            logprobs, state_values, dist_entropy = self.policy.evaluate(observation=observations, 
-                                                                        action=actions)
+             # now train using minibatches
+            for start in range(0, self.batch_size, self.train_minibatch_size): 
+                
+                if isinstance(batch_observations, np.ndarray):
+                    batch_observations=from_numpy(batch_observations)
+                
+                end = start + self.train_minibatch_size
+                mini_advantages=batch_advantages[start:end]
+                mini_observations=batch_observations[start:end]
+                mini_actions=batch_actions[start:end]
+                mini_returns=batch_returns[start:end]
+                
+                with torch.no_grad():#no gradient for the old policy
+                    logprobs_old, _, _ = self.old_policy.evaluate(observation=mini_observations, 
+                                                                 action=mini_actions)
 
-            ratios = torch.exp(logprobs - logprobs_old)
-      
-            # Finding Surrogate Loss  
-            surr1 = ratios * advantages
-            surr2 = torch.clamp(ratios, 1-self.clip_epsilon, 1+self.clip_epsilon) * advantages
 
-            # final loss of clipped objective PPO
-            loss = (-torch.min(surr1, surr2)+ 0.5 *self.MSE_loss(state_values.squeeze(), rwds) - 0.01 * dist_entropy).mean()
 
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
+                logprobs, state_values, dist_entropy = self.policy.evaluate(observation=mini_observations, 
+                                                                            action=mini_actions)
 
-       
+                ratios = torch.exp(logprobs - logprobs_old)
+        
+                # Finding Surrogate Loss  
+                surr1 = ratios * mini_advantages
+                surr2 = torch.clamp(ratios, 1-self.clip_epsilon, 1+self.clip_epsilon) * mini_advantages
+
+                # final loss of clipped objective PPO
+                loss = (-torch.min(surr1, surr2)
+                        + 0.5 *self.MSE_loss(state_values.squeeze(), mini_returns) 
+                        - 0.01 * dist_entropy).mean()
+
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
 
         self.old_policy.load_state_dict(self.policy.state_dict())
         self.replay_buffer.clear()
@@ -183,27 +195,6 @@ class PPO:
             
             
 
-# def update(self):
-    #     '''
-    #     Update the agent using PPO
-    #     '''
-    #     # TODO: Loop through buffer rewards backwards
-    #         # TODO: Determine discounted reward + and add to list
-
-    #     # TODO: Normalize rewards
-
-    #     # TODO: Calculate Advantages
-
-    #     # TODO: Loop through epochs
-    #         # TODO: Evaluate policy on old policy states + actions
-    #         # TODO: Calculate ratio
-    #         # TODO: Calculate Surrogate Loss + Clip
-    #         # TODO: Take gradient step
-
-    #     # TODO: Update old policy
-    #     # TODO: Clear replay buffer
-
-    #     pass
 
 
 

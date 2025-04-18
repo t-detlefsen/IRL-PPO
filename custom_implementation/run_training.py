@@ -69,7 +69,6 @@ class Args:
     """whether to let parallel environments reset upon termination instead of truncation"""
     reconfiguration_freq: Optional[int] = None
     """how often to reconfigure the environment during training"""
-    eval_minibatch_size: Optional[int] = None
 
     eval_reconfiguration_freq: Optional[int] = 1
     """for benchmarking purposes we want to reconfigure the eval environment each reset to ensure objects are randomized in some tasks"""
@@ -104,8 +103,7 @@ if __name__ == "__main__":
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
     print("n_iters= ", args.num_iterations)
-    if args.eval_minibatch_size is None:
-        args.eval_minibatch_size=args.minibatch_size
+  
 
     if args.exp_name is None:
         args.exp_name = os.path.basename(__file__)[: -len(".py")]

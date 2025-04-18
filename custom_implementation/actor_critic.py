@@ -25,7 +25,7 @@ class ActorCritic(nn.Module):
         # TODO: Initialize Critic
         super().__init__()
         self.logstd = nn.Parameter(torch.full((act_dim,), logstd))
-        self.logstd.to(get_device()).detach()
+        self.logstd.to(get_device())
         self.actor = build_mlp(
                                 input_size=obs_dim,
                                 output_size=act_dim,
@@ -49,8 +49,8 @@ class ActorCritic(nn.Module):
     def forward(self, observation: torch.FloatTensor):
        
         action_means= self.actor(observation) # the mean action from each observation in the batch
-        std = torch.exp(self.logstd).to(action_means.device).detach()
-        std = std.expand_as(action_means).detach()
+        std = torch.exp(self.logstd).to(action_means.device)
+        std = std.expand_as(action_means)
 
         covariance_matrix = torch.diag_embed(std).detach()
 

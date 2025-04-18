@@ -12,8 +12,14 @@ def getEnvs(args):
     env_kwargs = dict(obs_mode="state", render_mode="rgb_array", sim_backend="physx_cuda")
     # if args.control_mode is not None:
     #     env_kwargs["control_mode"] = args.control_mode
-    envs = gym.make(args.env_id, num_envs=args.num_envs if not args.evaluate else 1, reconfiguration_freq=args.reconfiguration_freq, **env_kwargs)
-    eval_envs = gym.make(args.env_id, num_envs=args.num_eval_envs, reconfiguration_freq=args.eval_reconfiguration_freq, **env_kwargs)
+    envs = gym.make(args.env_id,
+                    num_envs=args.num_envs if not args.evaluate else 1,
+                    reconfiguration_freq=args.reconfiguration_freq,
+                    **env_kwargs)
+    eval_envs = gym.make(args.env_id, 
+                         num_envs=args.num_eval_envs, 
+                         reconfiguration_freq=args.eval_reconfiguration_freq, 
+                         **env_kwargs)
     if isinstance(envs.action_space, gym.spaces.Dict):
         envs = FlattenActionSpaceWrapper(envs)
         eval_envs = FlattenActionSpaceWrapper(eval_envs)
@@ -21,7 +27,12 @@ def getEnvs(args):
         eval_output_dir = f"runs/{args.run_name}/videos"
         print(f"Saving eval videos to {eval_output_dir}")
        
-        eval_envs = RecordEpisode(eval_envs, output_dir=eval_output_dir, save_trajectory=args.evaluate, trajectory_name="trajectory", max_steps_per_video=args.num_eval_steps, video_fps=30)
+        eval_envs = RecordEpisode(eval_envs,
+                                output_dir=eval_output_dir,
+                                save_trajectory=args.evaluate,
+                                trajectory_name="trajectory",
+                                max_steps_per_video=args.num_eval_steps, 
+                                video_fps=30)
     envs = ManiSkillVectorEnv(envs, args.num_envs, ignore_terminations=not args.partial_reset, record_metrics=True)
     eval_envs = ManiSkillVectorEnv(eval_envs, args.num_eval_envs, ignore_terminations=not args.eval_partial_reset, record_metrics=True)
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
@@ -96,7 +107,7 @@ class PPO_trainer(object):
             print("\n\n********** Iteration %i ************"%iteration)
             paths, env_steps_thisbatch = self.collect_training_trajectories(
                                                                             agent=self.ppo_agent,
-                                                                            batch_size=self.ppo_agent.train_batch_size
+                                                                            batch_size=self.args.batch_size
                                                                             )
             
             total_env_steps +=env_steps_thisbatch
@@ -107,7 +118,7 @@ class PPO_trainer(object):
             with torch.no_grad():
                 eval_trajs,_= sample_trajectories(env=self.eval_envs,
                                                                 agent=self.ppo_agent,
-                                                                min_timesteps_per_batch=self.args.eval_minibatch_size,
+                                                                min_timesteps_per_batch=self.args.num_eval_steps,
                                                                 max_path_length=self.args.num_eval_steps,
                                                                 seed=self.args.seed
                                                                 )
