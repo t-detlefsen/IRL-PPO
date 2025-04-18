@@ -24,8 +24,8 @@ class ActorCritic(nn.Module):
         # TODO: Initialize Actor
         # TODO: Initialize Critic
         super().__init__()
-        self.logstd=nn.Parameter(torch.ones(1, act_dim))*logstd
-        self.logstd.to(get_device())
+        self.logstd = nn.Parameter(torch.full((act_dim,), logstd))
+        self.logstd.to(get_device()).detach()
         self.actor = build_mlp(
                                 input_size=obs_dim,
                                 output_size=act_dim,
@@ -49,10 +49,10 @@ class ActorCritic(nn.Module):
     def forward(self, observation: torch.FloatTensor):
        
         action_means= self.actor(observation) # the mean action from each observation in the batch
-        std = torch.exp(self.logstd).to(action_means.device)
-        std = std.expand_as(action_means)
+        std = torch.exp(self.logstd).to(action_means.device).detach()
+        std = std.expand_as(action_means).detach()
 
-        covariance_matrix = torch.diag_embed(std)
+        covariance_matrix = torch.diag_embed(std).detach()
 
         action_dist_out = distributions.MultivariateNormal(action_means.to(get_device()),
                                                            scale_tril = covariance_matrix.to(get_device()))
@@ -81,11 +81,11 @@ class ActorCritic(nn.Module):
             observation = obs
         else:
             observation = obs[None]
-        observation=from_numpy(obs)
+        observation=from_numpy(obs).detach()
         
         dist_action= self.forward(observation=observation)
         
-        action = dist_action.sample()
+        action = dist_action.sample().detach()
         action_logprob= to_numpy(dist_action.log_prob(action)).reshape(-1)
         value = to_numpy(self.critic(observation)).item()
         action=to_numpy(action).reshape(-1)
@@ -110,8 +110,7 @@ class ActorCritic(nn.Module):
         # TODO: Get distribution entropy
         # TODO: Query critic for state values
         # TODO: Return probs, states, entropy
-        observation=from_numpy(observation)
-        action=from_numpy(action)
+
 
         dist_action= self.forward(observation)
         act_logprob= dist_action.log_prob(action)

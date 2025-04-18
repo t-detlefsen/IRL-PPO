@@ -148,14 +148,17 @@ class PPO:
         
         advantages=from_numpy(advantages).detach()
         rwds=from_numpy(rwds[0]).detach()
-      
+        with torch.no_grad():
+            logprobs_old, _, _ = self.old_policy.evaluate(observation=from_numpy(observations).detach(), 
+                                                          action=from_numpy(actions).detach())
+        actions=from_numpy(actions).detach()
         
         for train_step in range(self.K_epochs):
+            if isinstance(observations, np.ndarray):
+                observations=from_numpy(observations)
+            
             logprobs, state_values, dist_entropy = self.policy.evaluate(observation=observations, 
                                                                         action=actions)
-
-            with torch.no_grad():
-                logprobs_old, _, _ = self.old_policy.evaluate(observation=observations, action=actions)
 
             ratios = torch.exp(logprobs - logprobs_old)
       
@@ -164,27 +167,8 @@ class PPO:
             surr2 = torch.clamp(ratios, 1-self.clip_epsilon, 1+self.clip_epsilon) * advantages
 
             # final loss of clipped objective PPO
-           
-            
             loss = (-torch.min(surr1, surr2)+ 0.5 *self.MSE_loss(state_values.squeeze(), rwds) - 0.01 * dist_entropy).mean()
 
-
-           
-            # print("\n[DEBUG] grad_fn check before backward:")
-            # print("logprobs grad_fn:", logprobs.grad_fn)
-            # print("logprobs_old grad_fn:", logprobs_old.grad_fn)
-            # print("state_values grad_fn:", state_values.grad_fn)
-            # print("dist_entropy grad_fn:", dist_entropy.grad_fn)
-            # print("advantages grad_fn:", advantages.grad_fn if hasattr(advantages, "grad_fn") else "N/A (likely detached)")
-            # print("rwds grad_fn:", rwds.grad_fn if hasattr(rwds, "grad_fn") else "N/A (likely detached)")
-            # print("policy_loss grad_fn:", policy_loss.grad_fn)
-            # print("value_loss grad_fn:", value_loss.grad_fn)
-            # print("entropy_loss grad_fn:", entropy_loss.grad_fn)
-            # print("loss grad_fn:", loss.grad_fn)
-            # print("dist_entropy:", dist_entropy.grad_fn)
-
-
-         
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
