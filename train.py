@@ -145,15 +145,19 @@ def main():
     parser.add_argument('--checkpoint', type=str, default=None) # Might need modified if used
 
     # Environment specific arguments
-    parser.add_argument('--env_id', type=str, default='PickCube-v1')
+    # Environment specific arguments
+    parser.add_argument('--env_id', type=str, default='PushCube-v1')
     parser.add_argument('--num_envs', type=int, default=1)
     parser.add_argument('--num_eval_envs', type=int, default=1)
+    parser.add_argument('--num_eval_steps', type=int, default=50)
+
     parser.add_argument('--capture_video', action='store_true')
     parser.add_argument('--save_train_video_freq', type=int, default=None)
     parser.add_argument('--evaluate', action='store_true')
     parser.add_argument('--control_mode', type=str, default='pd_joint_delta_pos')
     parser.add_argument('--reconfiguration_freq', type=int, default=None)
     parser.add_argument('--eval_reconfiguration_freq', type=int, default=1)
+    parser.add_argument('--num_steps', type=int, default=50)
 
     parser.add_argument('--partial_reset', action='store_true')
     parser.add_argument('--eval_partial_reset', action='store_true')
