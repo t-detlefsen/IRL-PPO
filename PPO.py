@@ -190,7 +190,7 @@ class PPO:
         # value‑function loss
         self.mse_loss = nn.MSELoss()
 
-    def select_action(self, state: torch.Tensor) -> torch.Tensor:
+    def select_action(self, state: torch.Tensor, eval=False) -> torch.Tensor:
         """
         Query π_θ_old to obtain an action and log probability, then stash
         everything we;ll need later into the replay buffer.
@@ -207,14 +207,19 @@ class PPO:
         # no gradients while sampling from θ_old
         with torch.no_grad():
             action, logprob, value = self.policy_old.act(state)
-
-        # save pieces needed for the PPO loss
-        self.buffer.states.append(state)
-        self.buffer.actions.append(action)
-        self.buffer.logprobs.append(logprob)
-        self.buffer.state_values.append(value)
+            
+        if not eval:
+            # save pieces needed for the PPO loss
+            self.buffer.states.append(state)
+            self.buffer.actions.append(action)
+            self.buffer.logprobs.append(logprob)
+            self.buffer.state_values.append(value)
+            
         # rewards and terminal flags are added *after* env.step()
-
+        # print("state shape:", state.shape)
+        # print("action shape:", action.shape)
+        # print("logprob shape:", logprob.shape)
+        # print("value shape:", value.shape)
         # return numpy array for the environment API
         return action.cpu().numpy()
 
@@ -227,11 +232,13 @@ class PPO:
         old_actions = torch.squeeze(torch.stack(self.buffer.actions, dim=0)).detach().to(self.device)
         old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0)).detach().to(self.device)
         old_state_values = torch.squeeze(torch.stack(self.buffer.state_values, dim=0)).detach().to(self.device)
-
+        # print("old_states shape:", old_states.shape)
+        # print("old_state_values shape:", old_state_values.shape)
         # Loop through buffer rewards backwards
         rewards = []
         discounted_reward = 0
         for reward, is_terminal in zip(reversed(self.buffer.rewards), reversed(self.buffer.is_terminals)):
+            # import ipdb; ipdb.reset_trace()
             if is_terminal:
                 discounted_reward = 0
             # Determine discounted reward + and add to list
@@ -241,7 +248,8 @@ class PPO:
         # Normalize rewards
         rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
         rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7)
-
+        print(rewards.shape)
+        print(old_state_values.shape)
         # Calculate advantages
         advantages = rewards.detach() - old_state_values.detach()
 
@@ -261,7 +269,7 @@ class PPO:
 
             # final loss of clipped objective PPO
             policy_loss = -torch.min(surr1, surr2)
-            value_loss = self.MSE_loss(state_values, rewards)
+            value_loss = self.mse_loss(state_values, rewards)
             entropy_loss = -0.01 * dist_entropy
             loss = (policy_loss + 0.5 * value_loss + entropy_loss).mean()
             ######################################
@@ -275,7 +283,7 @@ class PPO:
         self.policy_old.load_state_dict(self.policy.state_dict())
 
         # clear buffer to make PPO on policy
-        self.buffer.clear()
+        self.buffer.reset()
 
     def save(self, checkpoint_path):
         torch.save(self.policy_old.state_dict(), checkpoint_path)

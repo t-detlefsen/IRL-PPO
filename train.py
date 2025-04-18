@@ -1,10 +1,10 @@
 import argparse
-import datetime import datetime
+from datetime import datetime
 
 from PPO import PPO
 from envs.env import make_envs
 from utils import *
-
+from tqdm import tqdm
 class PPO_trainer(object):
     '''
     Train an RL agent using PPO
@@ -46,17 +46,16 @@ class PPO_trainer(object):
             train_rewards = []
 
             # Loop through steps
-            for j in range(self.params["max_ep_len"]):
-                # Generate action
-                self.agent.select_action(obs)
-
-                # Interact w/ environment
+            
+            for j in tqdm(range(self.params["max_ep_len"])):
+                # Generate action by interacting w/ environment
                 action = self.agent.select_action(obs)
                 obs, reward, terminal, _, _ = self.envs.step(action)
-
+                train_rewards.append(reward)
+                
                 # Update replay buffer
-                self.buffer.rewards.append(reward)
-                self.buffer.is_terminals.append(terminal)
+                self.agent.buffer.rewards.append(reward)
+                self.agent.buffer.is_terminals.append(terminal)
 
             # Evaluate performance
             print("Train mean reward:", torch.tensor(train_rewards).mean().item())
@@ -73,20 +72,18 @@ class PPO_trainer(object):
                 eval_rewards = []
 
                 # Loop through steps
-                for j in range(self.params["max_ep_len"]):
-                    # Generate action
-                    self.agent.select_action(eval_obs)
-
-                    # Interact w/ environment
-                    action = self.agent.select_action(obs)
-                    obs, reward, _, _, _ = self.envs.step(action)
+                for j in tqdm(range(self.params["max_ep_len"])):
+                    # Generate action by interacting w/ environment
+                    action = self.agent.select_action(eval_obs, eval=True)
+                    eval_obs, reward, _, _, _ = self.eval_envs.step(action)
                     eval_rewards.append(reward)
                 
                 # Evaluate performance
+                # print(eval_rewards)
                 print("Eval mean reward:", torch.tensor(eval_rewards).mean().item())
 
                 # Save model
-                self.agent.save("ckpts/epoch_{}.pth", i)
+                self.agent.save(f"ckpts/epoch_{i}.pth")
 
 def main():
     # Setup argument parser 
@@ -107,12 +104,18 @@ def main():
 
     # Environment specific arguments
     parser.add_argument('--env_id', type=str, default='PickCube-v1')
-    parser.add_argument('--num_envs', type=int, default=8)
-    parser.add_argument('--num_eval_envs', type=int, default=2)
+    parser.add_argument('--num_envs', type=int, default=1)
+    parser.add_argument('--num_eval_envs', type=int, default=1)
     parser.add_argument('--capture_video', action='store_true')
     parser.add_argument('--save_train_video_freq', type=int, default=None)
     parser.add_argument('--evaluate', action='store_true')
     parser.add_argument('--control_mode', type=str, default='pd_joint_delta_pos')
+    parser.add_argument('--reconfiguration_freq', type=int, default=None)
+    parser.add_argument('--eval_reconfiguration_freq', type=int, default=1)
+
+    parser.add_argument('--partial_reset', action='store_true')
+    parser.add_argument('--eval_partial_reset', action='store_true')
+
     args = parser.parse_args()
 
     params = vars(args)
