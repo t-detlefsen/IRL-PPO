@@ -233,26 +233,42 @@ class PPO:
         old_logprobs = torch.stack(self.buffer.logprobs, dim=0).detach().to(self.device)
         old_state_values = torch.stack(self.buffer.state_values, dim=0).detach().to(self.device)
 
-        # Compute discounted rewards
-        discounted_reward = torch.zeros_like(self.buffer.rewards[0])  # shape: (N,)
-        rewards = []
-        for reward, is_terminal in zip(reversed(self.buffer.rewards), reversed(self.buffer.is_terminals)):
-            discounted_reward = reward + self.gamma * discounted_reward * (~is_terminal.bool())
-            rewards.insert(0, discounted_reward.clone())
-        rewards = torch.stack(rewards).to(self.device)  # Shape: (T, N)
+        # # Compute discounted rewards
+        # discounted_reward = torch.zeros_like(self.buffer.rewards[0])  # shape: (N,)
+        # rewards = []
+        # for reward, is_terminal in zip(reversed(self.buffer.rewards), reversed(self.buffer.is_terminals)):
+        #     discounted_reward = reward + self.gamma * discounted_reward * (~is_terminal.bool())
+        #     rewards.insert(0, discounted_reward.clone())
+        # rewards = torch.stack(rewards).to(self.device)  # Shape: (T, N)
+
+        terminals = torch.stack(self.buffer.is_terminals, dim=0).cpu()
+        rewards = torch.stack(self.buffer.rewards, dim=0).detach().cpu()
+        values = old_state_values.squeeze()
+
+        self.gae_lambda = 0.9
+
+        values = torch.cat((values, torch.zeros(values[0].shape).unsqueeze(0)))
+        advantages = torch.zeros((rewards.shape[0] + 1, rewards.shape[1]))
+        advantages[:-1] = rewards - values[:-1]
+        for i in reversed(range(len(old_states))):
+            temp = (rewards[i].cpu() + self.gamma * values[i + 1] - values[i]) + self.gamma * self.gae_lambda * advantages[i + 1]
+            advantages[i][~terminals[i]] = temp[~terminals[i]]
+
+        advantages = advantages[:-1].flatten()
+        rewards = rewards.flatten()
 
         # Flatten all for PPO loss computation
-        rewards = rewards.view(-1)
+        # rewards = rewards.view(-1)
         old_states = old_states.view(-1, old_states.shape[-1])
         old_actions = old_actions.view(-1, old_actions.shape[-1])
         old_logprobs = old_logprobs.view(-1)
         old_state_values = old_state_values.view(-1)
 
-        # Normalize rewards
-        rewards = (rewards.detach() - rewards.mean()) / (rewards.std() + 1e-7)
+        # # Normalize rewards
+        # rewards = (rewards.detach() - rewards.mean()) / (rewards.std() + 1e-7)
 
-        # Calculate advantages
-        advantages = rewards - old_state_values.detach()
+        # # Calculate advantages
+        # advantages = rewards - old_state_values.detach()
 
         for _ in range(self.K_epochs):
             logprobs, state_values, dist_entropy = self.policy.evaluate(old_states, old_actions)
@@ -260,6 +276,7 @@ class PPO:
             state_values = state_values.view(-1)
 
             # PPO loss
+            # import ipdb; ipdb.set_trace()
             ratios = torch.exp(logprobs - old_logprobs.detach())
             surr1 = ratios * advantages
             surr2 = torch.clamp(ratios, 1 - self.eps_clip, 1 + self.eps_clip) * advantages

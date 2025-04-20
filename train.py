@@ -39,7 +39,7 @@ class PPO_trainer(object):
         Train the RL agent usng PPO
         '''
         time_step = 0
-        i_episode = 0
+        i_episode = 1
         print_running_reward = 0
         print_running_episodes = 0
 
@@ -48,7 +48,7 @@ class PPO_trainer(object):
             current_ep_reward = 0
 
             print(f"Episode {i_episode}")
-            for t in range(1, 1000+1):
+            for t in range(1, self.params["max_ep_len"]+1):
 
                 # select action with policy
                 action = self.agent.select_action(obs)
@@ -62,16 +62,30 @@ class PPO_trainer(object):
                 current_ep_reward += reward
 
                 # update PPO agent
-                if time_step % 4000 == 0:
+                if time_step % (4 * self.params["max_ep_len"]) == 0:
                     self.agent.update()
 
                 # printing average reward
-            if time_step % 10000 == 0:
+            if time_step % (10 * self.params["max_ep_len"]) == 0:
+                # # --------------- EVALUATE ---------------
+                # obs, _ = self.eval_envs.reset()
+                # eval_reward = 0
+                # for t in range(1, self.params["num_eval_steps"]+1):
+                #     # select action with policy
+                #     action = self.agent.select_action(obs)
+                #     obs, reward, terminal, _, _ = self.eval_envs.step(action)
+
+                #     eval_reward += reward
+                # # print average reward till last episode
+                # print_eval_reward = print_running_reward.mean().item()
+                # print_eval_reward = round(print_avg_reward, 2)
+                # # ----------------------------------------
+
                 # print average reward till last episode
-                print_avg_reward = print_running_reward.item() / print_running_episodes
+                print_avg_reward = print_running_reward.mean().item() / print_running_episodes
                 print_avg_reward = round(print_avg_reward, 2)
 
-                print("Episode : {} \t\t Timestep : {} \t\t Average Reward : {}".format(i_episode, time_step, print_avg_reward))
+                print("Episode : {} \t\t Timestep : {} \t\t Train Reward : {}".format(i_episode, time_step, print_avg_reward))
 
                 print_running_reward = 0
                 print_running_episodes = 0
@@ -131,25 +145,24 @@ class PPO_trainer(object):
 def main():
     # Setup argument parser 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--n_iter', type=int, default=20)
-    parser.add_argument('--max_ep_len', type=int, default=1000)
-    parser.add_argument('--update_freq', type=int, default=4)
+    # parser.add_argument('--n_iter', type=int, default=20)
+    parser.add_argument('--max_ep_len', type=int, default=50)
+    # parser.add_argument('--update_freq', type=int, default=4)
     parser.add_argument('--eval_freq', type=int, default=5)
     parser.add_argument('--lr_actor', type=float, default=3e-3)
     parser.add_argument('--lr_critic', type=float, default=3e-3)
-    parser.add_argument('--gamma', type=float, default=0.99)
-    parser.add_argument('--K_epochs', type=int, default=80)
+    parser.add_argument('--gamma', type=float, default=0.8)
+    parser.add_argument('--K_epochs', type=int, default=8)
     parser.add_argument('--eps_clip', type=float, default=0.2)
     parser.add_argument('--action_std_init', type=float, default=0.6)
     parser.add_argument('--device', type=str, default="cpu", choices={"cpu", "cuda"})
     parser.add_argument('--checkpoint', type=str, default=None) # Might need modified if used
 
     # Environment specific arguments
-    # Environment specific arguments
     parser.add_argument('--env_id', type=str, default='PushCube-v1')
-    parser.add_argument('--num_envs', type=int, default=1)
-    parser.add_argument('--num_eval_envs', type=int, default=1)
-    parser.add_argument('--num_eval_steps', type=int, default=50)
+    parser.add_argument('--num_envs', type=int, default=24)
+    parser.add_argument('--num_eval_envs', type=int, default=10)
+    parser.add_argument('--num_eval_steps', type=int, default=1000)
 
     parser.add_argument('--capture_video', action='store_true')
     parser.add_argument('--save_train_video_freq', type=int, default=None)
