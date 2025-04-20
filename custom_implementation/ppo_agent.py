@@ -56,12 +56,21 @@ class PPO:
         
         self.old_policy = ActorCritic(obs_dim=self.obs_dim,
                                   act_dim=self.act_dim,
-                                  logstd=log_std,) # 1 step old ploicy
+                                  logstd=log_std,
+                                  hl_size_actor=args.hl_size_actor,
+                                  hl_size_critic=args.hl_size_critic,
+                                  activation_actor=args.activation_actor,
+                                  activation_critic=args.activation_critic,
+                                  n_hl_actor=args.n_hl_actor,
+                                  n_hl_critic=args. n_hl_critic,
+                                    output_activation_actor=args.output_activation_actor,
+                                    output_activation_critic=args.output_activation_critic,
+                                  ) #curr policy
         self.optimizer = torch.optim.Adam([
                         {'params': self.policy.actor.parameters(), 'lr': self.lr_actor},
                         {'params': self.policy.critic.parameters(), 'lr': self.lr_critic}])
 
-    def get_action_and_value(self, state: np.array) -> np.array:
+    def get_action_and_value(self, state: np.array, deterministic=False) -> np.array:
         '''
         Select an action using the agent
 
@@ -76,7 +85,7 @@ class PPO:
         # TODO: Return action
         #print(state)
         with torch.no_grad():
-            action, _, value = self.old_policy.act(state)
+            action, _, value = self.old_policy.act(state,deterministic)
         return action,value
 
     

@@ -45,6 +45,8 @@ class ActorCritic(nn.Module):
                                 output_activation=output_activation_critic
                                 )
         self.critic.to(get_device())
+        self.action_space_low=None
+        self.action_space_high=None
 
     def forward(self, observation: torch.FloatTensor):
        
@@ -59,7 +61,7 @@ class ActorCritic(nn.Module):
         return action_dist_out
 
 
-    def act(self, obs: np.array): 
+    def act(self, obs: np.array, deterministic = False): 
         '''
         Select action given current state
 
@@ -82,13 +84,19 @@ class ActorCritic(nn.Module):
         else:
             observation = obs[None]
         observation=from_numpy(obs).detach()
-        
-        dist_action= self.forward(observation=observation)
-        
-        action = dist_action.sample().detach()
-        action_logprob= to_numpy(dist_action.log_prob(action)).reshape(-1)
-        value = to_numpy(self.critic(observation)).item()
-        action=to_numpy(action).reshape(-1)
+        if deterministic==False:
+            dist_action= self.forward(observation=observation)
+            action = dist_action.sample().detach()
+            action_logprob= to_numpy(dist_action.log_prob(action)).reshape(-1)
+            value = to_numpy(self.critic(observation)).item()
+            action=to_numpy(action).reshape(-1)
+            action= self.clip_action(action)
+        else:
+            action=self.actor(observation).detach()
+            action=to_numpy(action).reshape(-1)
+            action= self.clip_action(action)
+            action_logprob=None
+            value=None
 
         return action, action_logprob, value
 
@@ -119,5 +127,10 @@ class ActorCritic(nn.Module):
 
         return act_logprob, values, entropy
     
+    def set_actionspace(self,action_space_low,action_space_high):
+        self.action_space_low=action_space_low
+        self.action_space_high=action_space_high
 
-    
+
+    def clip_action(self,action: np.array):
+        return np.clip(action, self.action_space_low, self.action_space_high)

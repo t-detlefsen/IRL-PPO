@@ -31,8 +31,9 @@ def getEnvs(args):
                                 output_dir=eval_output_dir,
                                 save_trajectory=args.evaluate,
                                 trajectory_name="trajectory",
-                                max_steps_per_video=args.num_eval_steps, 
-                                video_fps=30)
+                                max_steps_per_video=args.num_eval_steps*160, 
+                                video_fps=30,
+                                )
     envs = ManiSkillVectorEnv(envs, args.num_envs, ignore_terminations=not args.partial_reset, record_metrics=True)
     eval_envs = ManiSkillVectorEnv(eval_envs, args.num_eval_envs, ignore_terminations=not args.eval_partial_reset, record_metrics=True)
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
@@ -62,8 +63,15 @@ class PPO_trainer(object):
             act_dim=self.envs.single_action_space.shape[0],
             log_std=-0.5,
             )
+        action_space_low, action_space_high = self.envs.single_action_space.low, self.envs.single_action_space.high
+        self.ppo_agent.policy.set_actionspace(action_space_low, action_space_high)
+        self.ppo_agent.old_policy.set_actionspace(action_space_low, action_space_high)
+
+
         self.num_training_iter= args.num_iterations
         self.num_steps_per_rollout=args.num_steps_per_rollout
+        print("in PPO_trainer __init__, num_steps_per_rollout:", self.num_steps_per_rollout)
+        print("batch size ", self.args.batch_size)
 
         writer = SummaryWriter(f"runs/{args.run_name}")
         self.logger=Logger(writer)
@@ -115,17 +123,19 @@ class PPO_trainer(object):
             self.ppo_agent.train_agent_singlebatch()
 
             #EVALUATION
-            with torch.no_grad():
-                eval_trajs,_= sample_trajectories(env=self.eval_envs,
-                                                                agent=self.ppo_agent,
-                                                                min_timesteps_per_batch=self.args.num_eval_steps,
-                                                                max_path_length=self.args.num_eval_steps,
-                                                                seed=self.args.seed
-                                                                )
-                eval_rwds=[eval_traj["reward"].sum() for eval_traj in eval_trajs]
+            if iteration % self.args.eval_freq ==0:
+                with torch.no_grad():
+                    eval_trajs,_= sample_trajectories(env=self.eval_envs,
+                                                                    agent=self.ppo_agent,
+                                                                    min_timesteps_per_batch=self.args.num_eval_steps,
+                                                                    max_path_length=self.args.num_eval_steps,
+                                                                    seed=self.args.seed,
+                                                                    deterministic=True
+                                                                    )
+                    eval_rwds=[eval_traj["reward"].sum() for eval_traj in eval_trajs]
 
-                self.logger.add_scalar(tag="Eval_AverageReturn", scalar_value=np.mean(eval_rwds),step=iteration)
-                self.logger.add_scalar(tag="Eval_StdReturn", scalar_value=np.std(eval_rwds),step=iteration)
+                    self.logger.add_scalar(tag="Eval_AverageReturn", scalar_value=np.mean(eval_rwds),step=iteration)
+                    self.logger.add_scalar(tag="Eval_StdReturn", scalar_value=np.std(eval_rwds),step=iteration)
 
     def close_envs(self):
         self.envs.close()

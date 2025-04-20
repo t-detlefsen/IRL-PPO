@@ -99,7 +99,7 @@ class Args:
 if __name__ == "__main__":
 
     args = tyro.cli(Args)
-    args.batch_size = int(args.num_envs * args.num_steps_per_rollout)
+    args.batch_size = int(args.num_envs *5* args.num_steps_per_rollout)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
     print("n_iters= ", args.num_iterations)

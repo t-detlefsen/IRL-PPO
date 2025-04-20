@@ -152,7 +152,9 @@ def calculate_q_vals( rewards_list,gamma,rtg:bool=True):
     return q_vals  # return an array
 
 
-def sample_trajectory(env, agent, num_steps_per_rollout, seed:int):
+def sample_trajectory(env, agent, num_steps_per_rollout, seed:int,deterministic=False):
+    print("in sample traj, num steps per rollout=", num_steps_per_rollout)
+    print("deterministic= " , deterministic)
     ob, _ = env.reset(seed=seed)
     ob=to_numpy(ob)
 
@@ -161,7 +163,7 @@ def sample_trajectory(env, agent, num_steps_per_rollout, seed:int):
     while True:
 
         obs.append(ob)
-        ac , val= agent.get_action_and_value(ob)# HINT: query the policy's get_action function [OK]
+        ac , val= agent.get_action_and_value(ob,deterministic)# HINT: query the policy's get_action function [OK]
         vals.append(val)
         acs.append(ac)
 
@@ -187,14 +189,19 @@ def sample_trajectory(env, agent, num_steps_per_rollout, seed:int):
             break
     return Path(obs, acs,vals, rewards, terminals)
 
-def sample_trajectories(env, agent, min_timesteps_per_batch, max_path_length, seed:int):
+def sample_trajectories(env, agent, min_timesteps_per_batch, max_path_length, seed:int, deterministic=False):
     timesteps_this_batch = 0
     paths = []
     while timesteps_this_batch < min_timesteps_per_batch:
-        path=sample_trajectory(env, agent, max_path_length, seed)
+        print("in sample trajs loop, determin = ", deterministic)
+        if deterministic==True:
+            print('At Evaluation timestep:    ', timesteps_this_batch, '/', min_timesteps_per_batch, end='\r')
+        else:
+            print('At timestep:    ', timesteps_this_batch, '/', min_timesteps_per_batch, end='\r')
+        path=sample_trajectory(env, agent, max_path_length, seed, deterministic)
         paths.append(path)
         timesteps_this_batch = timesteps_this_batch+get_pathlength(path)
-        print('At timestep:    ', timesteps_this_batch, '/', min_timesteps_per_batch, end='\r')
+        
     return paths, timesteps_this_batch
 
 
