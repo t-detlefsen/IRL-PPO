@@ -31,7 +31,9 @@ class Agent(nn.Module):
             layer_init(nn.Linear(256, np.prod(envs.single_action_space.shape)), std=0.01*np.sqrt(2)),
         )
         self.actor_logstd = nn.Parameter(torch.ones(1, np.prod(envs.single_action_space.shape)) * -0.5)
-
+        self.action_space_low, self.action_space_high = torch.from_numpy(envs.single_action_space.low).to("cuda"), torch.from_numpy(envs.single_action_space.high).to("cuda")
+    def clip_action(self,action):
+        return torch.clamp(action.detach(), self.action_space_low, self.action_space_high)
     def get_value(self, x):
         return self.critic(x)
     def get_action(self, x, deterministic=False):

@@ -10,6 +10,7 @@ import mani_skill.envs
 from mani_skill.utils.wrappers.flatten import FlattenActionSpaceWrapper
 from mani_skill.utils.wrappers.record import RecordEpisode
 from mani_skill.vector.wrappers.gymnasium import ManiSkillVectorEnv
+from mani_skill.utils import gym_utils
 
 def set_random_seeds(seed):
     '''
@@ -35,14 +36,15 @@ def getEnvs(args):
         if args.evaluate:
             eval_output_dir = f"{os.path.dirname(args.checkpoint)}/test_videos"
         print(f"Saving eval videos to {eval_output_dir}")
+        max_steps_per_vid=100
         if args.save_train_video_freq is not None:
             save_video_trigger = lambda x : (x // args.num_steps) % args.save_train_video_freq == 0
-            envs = RecordEpisode(envs, output_dir=f"runs/{args.run_name}/train_videos", save_trajectory=False, save_video_trigger=save_video_trigger, max_steps_per_video=args.num_steps, video_fps=30)
-        eval_envs = RecordEpisode(eval_envs, output_dir=eval_output_dir, save_trajectory=args.evaluate, trajectory_name="trajectory", max_steps_per_video=args.num_eval_steps, video_fps=30)
+            envs = RecordEpisode(envs, output_dir=f"runs/{args.run_name}/train_videos", save_trajectory=False, save_video_trigger=save_video_trigger, max_steps_per_video=max_steps_per_vid, video_fps=30)
+        eval_envs = RecordEpisode(eval_envs, output_dir=eval_output_dir, save_trajectory=args.evaluate, trajectory_name="trajectory", max_steps_per_video=max_steps_per_vid, video_fps=30)
     envs = ManiSkillVectorEnv(envs, args.num_envs, ignore_terminations=not args.partial_reset, record_metrics=True)
     eval_envs = ManiSkillVectorEnv(eval_envs, args.num_eval_envs, ignore_terminations=not args.eval_partial_reset, record_metrics=True)
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
-    return envs, getEnvs
+    return envs, eval_envs
 
 
 
@@ -52,8 +54,7 @@ def save_model(agent,run_name,iteration):
     torch.save(agent.state_dict(), model_path)
     print(f"model saved to {model_path}")
 
-def clip_action(action: torch.Tensor, action_space_low, action_space_high):
-        return torch.clamp(action.detach(), action_space_low, action_space_high)
+
 
 
 def calculate_ppo_loss():
@@ -61,15 +62,20 @@ def calculate_ppo_loss():
 
 
 
-def collect_training_data(self,
+def collect_training_data(
                             agent,
                             envs,
                             num_steps,
                             num_envs,
                             device,
                             obs_shape,
-                            act_shape):
-    
+                            act_shape,
+                            global_step,
+                            logger,
+                            seed):
+    next_obs, _ = envs.reset(seed=seed)
+   
+    next_done = torch.zeros(num_envs, device=device)
     obs = torch.zeros((num_steps, num_envs) + obs_shape).to(device)
     actions = torch.zeros((num_steps, num_envs) + act_shape).to(device)
     logprobs = torch.zeros((num_steps, num_envs)).to(device)
@@ -79,7 +85,7 @@ def collect_training_data(self,
     final_values = torch.zeros((num_steps, num_envs), device=device)
         
     for step in range(0, num_steps):
-        self.global_step += num_envs
+        global_step += num_envs
         obs[step] = next_obs
         dones[step] = next_done
 
@@ -91,7 +97,7 @@ def collect_training_data(self,
         logprobs[step] = logprob
 
         # TRY NOT TO MODIFY: execute the game and log data.
-        next_obs, reward, terminations, truncations, infos = envs.step(clip_action(action))
+        next_obs, reward, terminations, truncations, infos = envs.step(agent.clip_action(action))
         next_done = torch.logical_or(terminations, truncations).to(torch.float32)
         rewards[step] = reward.view(-1) 
 
@@ -99,64 +105,64 @@ def collect_training_data(self,
             final_info = infos["final_info"]
             done_mask = infos["_final_info"]
             for k, v in final_info["episode"].items():
-                self.logger.add_scalar(f"train/{k}", v[done_mask].float().mean(), self.global_step)
+                logger.add_scalar(f"train/{k}", v[done_mask].float().mean(), global_step)
             with torch.no_grad():
                 final_values[step, torch.arange(num_envs, device=device)[done_mask]] = agent.get_value(infos["final_observation"][done_mask]).view(-1)
-    return obs, actions, logprobs, rewards,dones, values, final_values, next_done
+    return obs, actions, logprobs, rewards,dones, values, final_values, next_obs, next_done, global_step, logger
 
 
 
 
 
 def compute_advantages(agent,
-                           num_steps,
-                           gae, 
-                           next_obs, 
-                           rewards,
-                           dones,
-                           values,
-                           final_values, 
-                           next_done, 
-                           gae_lambda, 
-                           gamma):
-        
-        next_value = agent.get_value(next_obs).reshape(1, -1)
-        advantages = torch.zeros_like(rewards).to(device)
-        lastgaelam = 0
-        for t in reversed(range(num_steps)):
-            if t == num_steps - 1:
-                next_not_done = 1.0 - next_done
-                nextvalues = next_value
-            else:
-                next_not_done = 1.0 - dones[t + 1]
-                nextvalues = values[t + 1]
-            real_next_values = next_not_done * nextvalues + final_values[t] # t instead of t+1
-            if gae:
-                """
-                See GAE paper equation(16) line 1, we will compute the GAE based on this line only
-                1             *(  -V(s_t)  + r_t                                                               + gamma * V(s_{t+1})   )
-                lambda        *(  -V(s_t)  + r_t + gamma * r_{t+1}                                             + gamma^2 * V(s_{t+2}) )
-                lambda^2      *(  -V(s_t)  + r_t + gamma * r_{t+1} + gamma^2 * r_{t+2}                         + ...                  )
-                lambda^3      *(  -V(s_t)  + r_t + gamma * r_{t+1} + gamma^2 * r_{t+2} + gamma^3 * r_{t+3}
-                We then normalize it by the sum of the lambda^i (instead of 1-lambda)
-                """
-                if t == num_steps - 1: # initialize
-                    lam_coef_sum = 0.
-                    reward_term_sum = 0. # the sum of the second term
-                    value_term_sum = 0. # the sum of the third term
-                lam_coef_sum = lam_coef_sum * next_not_done
-                reward_term_sum = reward_term_sum * next_not_done
-                value_term_sum = value_term_sum * next_not_done
+                        num_steps,
+                        gae, 
+                        next_obs, 
+                        rewards,
+                        dones,
+                        values,
+                        final_values, 
+                        next_done, 
+                        gae_lambda, 
+                        gamma):
+        with torch.no_grad():
+            next_value = agent.get_value(next_obs).reshape(1, -1)
+            advantages = torch.zeros_like(rewards).to(device)
+            lastgaelam = 0
+            for t in reversed(range(num_steps)):
+                if t == num_steps - 1:
+                    next_not_done = 1.0 - next_done
+                    nextvalues = next_value
+                else:
+                    next_not_done = 1.0 - dones[t + 1]
+                    nextvalues = values[t + 1]
+                real_next_values = next_not_done * nextvalues + final_values[t] # t instead of t+1
+                if gae:
+                    """
+                    See GAE paper equation(16) line 1, we will compute the GAE based on this line only
+                    1             *(  -V(s_t)  + r_t                                                               + gamma * V(s_{t+1})   )
+                    lambda        *(  -V(s_t)  + r_t + gamma * r_{t+1}                                             + gamma^2 * V(s_{t+2}) )
+                    lambda^2      *(  -V(s_t)  + r_t + gamma * r_{t+1} + gamma^2 * r_{t+2}                         + ...                  )
+                    lambda^3      *(  -V(s_t)  + r_t + gamma * r_{t+1} + gamma^2 * r_{t+2} + gamma^3 * r_{t+3}
+                    We then normalize it by the sum of the lambda^i (instead of 1-lambda)
+                    """
+                    if t == num_steps - 1: # initialize
+                        lam_coef_sum = 0.
+                        reward_term_sum = 0. # the sum of the second term
+                        value_term_sum = 0. # the sum of the third term
+                    lam_coef_sum = lam_coef_sum * next_not_done
+                    reward_term_sum = reward_term_sum * next_not_done
+                    value_term_sum = value_term_sum * next_not_done
 
-                lam_coef_sum = 1 + gae_lambda * lam_coef_sum
-                reward_term_sum = gae_lambda * gamma * reward_term_sum + lam_coef_sum * rewards[t]
-                value_term_sum = gae_lambda * gamma * value_term_sum + gamma * real_next_values
+                    lam_coef_sum = 1 + gae_lambda * lam_coef_sum
+                    reward_term_sum = gae_lambda * gamma * reward_term_sum + lam_coef_sum * rewards[t]
+                    value_term_sum = gae_lambda * gamma * value_term_sum + gamma * real_next_values
 
-                advantages[t] = (reward_term_sum + value_term_sum) / lam_coef_sum - values[t]
-            else:
-                delta = rewards[t] + gamma * real_next_values - values[t]
-                advantages[t] = lastgaelam = delta + gamma * gae_lambda * next_not_done * lastgaelam
-        returns = advantages + values
+                    advantages[t] = (reward_term_sum + value_term_sum) / lam_coef_sum - values[t]
+                else:
+                    delta = rewards[t] + gamma * real_next_values - values[t]
+                    advantages[t] = lastgaelam = delta + gamma * gae_lambda * next_not_done * lastgaelam
+            returns = advantages + values
         return advantages, returns
 
 

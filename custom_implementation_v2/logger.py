@@ -36,7 +36,7 @@ class Logger:
                 "hyperparameters",
                 "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),)
         else:
-            self.logger=None
+            self.writer=None
             print("Running evaluation")
 
     def add_scalar(self, tag, scalar_value, step):
@@ -45,3 +45,4 @@ class Logger:
         self.writer.add_scalar(tag, scalar_value, step)
     def close(self):
         self.writer.close()
+
