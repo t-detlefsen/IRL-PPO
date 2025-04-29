@@ -6,12 +6,7 @@ class Args:
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
-    track: bool = False
-    """if toggled, this experiment will be tracked with Weights and Biases"""
-    wandb_project_name: str = "ManiSkill"
-    """the wandb's project name"""
-    wandb_entity: Optional[str] = None
-    """the entity (team) of wandb's project"""
+   
     capture_video: bool = True
     """whether to capture videos of the agent performances (check out `videos` folder)"""
     save_model: bool = True
@@ -56,8 +51,8 @@ class Args:
     """Toggles advantages normalization"""
     clip_coef: float = 0.2
     """the surrogate clipping coefficient"""
-    clip_vloss: bool = False
-    """Toggles whether or not to use a clipped loss for the value function, as per the paper."""
+    # clip_vloss: bool = False
+    # """clipping the vloss is not mentioned in the original paper"""
     ent_coef: float = 0.0
     """coefficient of the entropy"""
     vf_coef: float = 0.5
@@ -68,7 +63,7 @@ class Args:
     """evaluation frequency in terms of iterations"""
     save_train_video_freq: Optional[int] = None
     """frequency to save training videos in terms of iterations"""
-    finite_horizon_gae: bool = False
+    finite_horizon_gae: bool = True
 
     env_kwargs = dict(obs_mode="state", render_mode="rgb_array", sim_backend="physx_cuda")
 
