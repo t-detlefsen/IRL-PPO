@@ -2,7 +2,6 @@ from torch.utils.tensorboard import SummaryWriter
 
 class Logger:
     def __init__(self,args) -> None:
-        env_kwargs=args.env_kwargs
         if not args.evaluate:
             print("Running training")
             self.writer = SummaryWriter(f"runs/{args.run_name}")

@@ -17,7 +17,7 @@ class Args:
     """path to a pretrained checkpoint file to start evaluation/training from"""
 
     # Algorithm specific arguments
-    env_id: str = "PickCube-v1"
+    env_id: str = "OpenCabinetDrawer-v1"
     """the id of the environment"""
     num_iterations: int = 100
     """the number of iterations"""
@@ -53,7 +53,7 @@ class Args:
     """the surrogate clipping coefficient"""
     # clip_vloss: bool = False
     # """clipping the vloss is not mentioned in the original paper"""
-    ent_coef: float = 0.0
+    ent_coef: float = 0.005
     """coefficient of the entropy"""
     vf_coef: float = 0.5
     """coefficient of the value function"""
@@ -66,7 +66,7 @@ class Args:
     finite_horizon_gae: bool = True
 
     env_kwargs = dict(obs_mode="state", render_mode="rgb_array", sim_backend="physx_cuda")
-    
+
     num_steps= None
     """the number of steps to run in each environment per policy rollout"""
 
