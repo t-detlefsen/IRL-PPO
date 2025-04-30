@@ -66,6 +66,9 @@ class Args:
     finite_horizon_gae: bool = True
 
     env_kwargs = dict(obs_mode="state", render_mode="rgb_array", sim_backend="physx_cuda")
+    
+    num_steps= None
+    """the number of steps to run in each environment per policy rollout"""
 
 
 
@@ -75,8 +78,7 @@ class Args:
     """the batch size (computed in runtime)"""
     minibatch_size: int = 0
     """the mini-batch size (computed in runtime)"""
-    num_steps= None
-    """the number of steps to run in each environment per policy rollout"""
+ 
     num_eval_steps= None
     """the number of steps to run in each evaluation environment during evaluation"""
     run_name=None
