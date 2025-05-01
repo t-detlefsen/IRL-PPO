@@ -15,7 +15,7 @@ class PPO_Trainer():
         
         if args.exp_name is None:
             args.exp_name = os.path.basename(__file__)[: -len(".py")]
-            args.run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}_nEnvs_{args.num_envs}_nEvalEnvs_{args.num_eval_envs}_iter_{args.num_iterations}_lr_{args.learning_rate}_clipCoef_{args.clip_coef}_vfCoef_{args.vf_coef}_entCoef_{args.ent_coef}"
+            args.run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}_nEnvs_{args.num_envs}_nEvalEnvs_{args.num_eval_envs}_FHgae_{args.finite_horizon_gae}_lr_{args.learning_rate}_clipCoef_{args.clip_coef}_vfCoef_{args.vf_coef}_entCoef_{args.ent_coef}"
         else:
             args.run_name = args.exp_name
 
@@ -47,12 +47,11 @@ class PPO_Trainer():
         self.act_shape=self.envs.single_action_space.shape
         print("obs_shape= ", self.obs_shape )
         print("act_shape= ", self.act_shape)
-      
         self.obs_dim=np.array(self.obs_shape).prod()
         self.act_dim=np.array(self.act_shape).prod()
         # print("obs_dim= ", self.obs_dim )
         # print("act_dim= ", self.act_dim)
-        self.agent = Agent(self.obs_dim, self.act_dim).to(self.device)
+        self.agent = Agent(args,self.obs_dim, self.act_dim).to(self.device)
         if args.checkpoint: #if you want to load the model as a specific checkpoint
             self.agent.load_state_dict(torch.load(args.checkpoint))
         
@@ -132,7 +131,8 @@ class PPO_Trainer():
             ################ QUERY CURRENT POLICY #########################################
             # get an action from the current policy using the current observation
             with torch.no_grad():
-                action_from_policy, logprob, _, value = self.agent.get_action_and_value(cur_obs)
+                action_from_policy, logprob = self.agent.get_action_and_logprob(cur_obs)
+                value= self.agent.get_value(cur_obs)
                 values[step] = value.flatten()
             actions[step] = action_from_policy
             logprobs[step] = logprob
@@ -188,7 +188,7 @@ class PPO_Trainer():
             num_episodes = 0
             for _ in range(self.num_eval_steps):
                 with torch.no_grad():
-                    act=self.agent.get_action(eval_currobs, deterministic=True)#why use deterministic?
+                    act=self.agent.get_action_for_inference(eval_currobs)
                     eval_nxtobs, _, _, _, eval_infos = self.eval_envs.step(act)
                     if "final_info" in eval_infos:
                         done_mask = eval_infos["_final_info"] # says if the episode terminated, shape: (num_envs,)
@@ -265,7 +265,11 @@ class PPO_Trainer():
                     if args.norm_adv:
                         mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
 
-                    _, newlogprobs, entropys, newvalues = self.agent.get_action_and_value(mb_observations, mb_actions)
+                    # recompute the logprobs and values using the updated policy
+                    # compares what the old policy did with what the current policy would do
+                    newlogprobs , entropys = self.agent.get_newlogprob_and_entropy(observation=mb_observations, old_action=mb_actions)
+                    newvalues = self.agent.get_value(observation=mb_observations)
+
              
                     # Policy loss
                     ratios = torch.exp(newlogprobs - mb_oldlogprobs)
@@ -320,8 +324,8 @@ class PPO_Trainer():
                 self.logger.add_scalar(tag="train/epoch_entropy_bonus", scalar_value=entropy_bonus_this_epoch, step=self.total_epochs)
 
                 self.total_epochs +=1
+            # Iteration Complete
             print()
-
             del rollout_data #delete rollout data to stay on-policy
 
             #LOGGING
@@ -337,6 +341,11 @@ class PPO_Trainer():
             iter_total_loss = sum(epoch_total_losses) / len(epoch_total_losses)
             self.logger.add_scalar("train/total_loss", iter_total_loss, iteration)
 
+            if iteration == self.num_iterations:
+                print("Running Final Evaluations")
+                self.evaluate(iteration)
+                if args.save_model:
+                    save_model(self.agent,self.run_name,iteration)
 
 
 

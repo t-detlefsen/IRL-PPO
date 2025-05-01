@@ -51,7 +51,10 @@ def save_model(agent,run_name,iteration):
     torch.save(agent.state_dict(), model_path)
     print(f"model saved to {model_path}")
 
-
+def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
+    torch.nn.init.orthogonal_(layer.weight, std)
+    torch.nn.init.constant_(layer.bias, bias_const)
+    return layer
 
 def build_mlp(
         input_size: int,
@@ -60,6 +63,7 @@ def build_mlp(
         size: int,
         activation = 'tanh',
         output_activation = 'identity',
+        stabilize_output=False
 ):
     _str_to_activation = {
     'relu': nn.ReLU(),
@@ -89,10 +93,14 @@ def build_mlp(
     layers = []
     in_size = input_size
     for _ in range(n_layers):
-        layers.append(nn.Linear(in_size, size))
+        layers.append(layer_init(nn.Linear(in_size, size)))
         layers.append(activation)
         in_size = size
-    layers.append(nn.Linear(in_size, output_size))
+
+    if not stabilize_output:
+        layers.append(layer_init(nn.Linear(in_size, output_size)))
+    else:
+        layers.append(layer_init(nn.Linear(in_size, output_size),std=0.01*np.sqrt(2)))
     layers.append(output_activation)
     return nn.Sequential(*layers)
 

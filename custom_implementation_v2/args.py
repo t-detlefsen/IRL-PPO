@@ -67,10 +67,17 @@ class Args:
 
     env_kwargs = dict(obs_mode="state", render_mode="rgb_array", sim_backend="physx_cuda")
 
-    num_steps= None
-    """the number of steps to run in each environment per policy rollout"""
+    #actor architecture
+    n_hl_actor: int =3# num of hidden layers
+    hl_size_actor =256 # hidden layer sizes
+    activation_actor = 'tanh'
+    output_activation_actor= 'identity'
 
-
+    # Critic architecture
+    n_hl_critic: int =3# num of hidden layers
+    hl_size_critic =256 # hidden layer sizes
+    activation_critic= 'tanh'
+    output_activation_critic = 'identity'
 
 
     # to be filled in runtime
@@ -78,7 +85,8 @@ class Args:
     """the batch size (computed in runtime)"""
     minibatch_size: int = 0
     """the mini-batch size (computed in runtime)"""
- 
+    num_steps= None
+    """the number of steps to run in each environment per policy rollout"""
     num_eval_steps= None
     """the number of steps to run in each evaluation environment during evaluation"""
     run_name=None
