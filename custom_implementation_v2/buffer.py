@@ -13,8 +13,7 @@ class Rollout_Data:
 
         self.advantages=None
         self.returns=None
-        self.num_mb=None
-        self.mb_ID= None
+
     
     def compute_advantages_and_returns(self, num_steps, gamma, use_gae,use_fh_gae, gae_lambda, device="cuda"):
         with torch.no_grad():

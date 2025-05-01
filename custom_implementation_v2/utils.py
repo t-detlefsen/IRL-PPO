@@ -61,18 +61,18 @@ def build_mlp(
         output_size: int,
         n_layers: int,
         size: int,
-        activation = 'tanh',
-        output_activation = 'identity',
+        activation = "tanh",
+        output_activation = "identity",
         stabilize_output=False
 ):
     _str_to_activation = {
-    'relu': nn.ReLU(),
-    'tanh': nn.Tanh(),
-    'leaky_relu': nn.LeakyReLU(),
-    'sigmoid': nn.Sigmoid(),
-    'selu': nn.SELU(),
-    'softplus': nn.Softplus(),
-    'identity': nn.Identity(),}
+    "relu": nn.ReLU(),
+    "tanh": nn.Tanh(),
+    "leaky_relu": nn.LeakyReLU(),
+    "sigmoid": nn.Sigmoid(),
+    "selu": nn.SELU(),
+    "softplus": nn.Softplus(),
+    "identity": nn.Identity(),}
     """
         Builds a feedforward neural network
         arguments:

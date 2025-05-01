@@ -69,15 +69,15 @@ class Args:
 
     #actor architecture
     n_hl_actor: int =3# num of hidden layers
-    hl_size_actor =256 # hidden layer sizes
-    activation_actor = 'tanh'
-    output_activation_actor= 'identity'
+    hl_size_actor:int =256 # hidden layer sizes
+    activation_actor:str = "tanh"
+    output_activation_actor: str= "identity"
 
     # Critic architecture
     n_hl_critic: int =3# num of hidden layers
-    hl_size_critic =256 # hidden layer sizes
-    activation_critic= 'tanh'
-    output_activation_critic = 'identity'
+    hl_size_critic: int =256 # hidden layer sizes
+    activation_critic: str= "tanh"
+    output_activation_critic:str = "identity"
 
 
     # to be filled in runtime
