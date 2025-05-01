@@ -52,9 +52,10 @@ class PPO_Trainer():
         # print("obs_dim= ", self.obs_dim )
         # print("act_dim= ", self.act_dim)
         self.agent = Agent(args,self.obs_dim, self.act_dim).to(self.device)
-        if args.checkpoint: #if you want to load the model as a specific checkpoint
+        if args.checkpoint: #if you want to load the model at a specific checkpoint
             self.agent.load_state_dict(torch.load(args.checkpoint))
-        
+        print("Agent Structure: \n",self.agent)
+
         # save necessary values and variables
         self.optimizer = optim.Adam(self.agent.parameters(), lr=args.learning_rate, eps=1e-5)
         self.action_space_low = torch.from_numpy(self.envs.single_action_space.low).to(self.device)
