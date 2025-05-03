@@ -48,12 +48,14 @@ For this baseline code, we significantly restructured the original [ManiSkill PP
 ## Example Baseline Code Command
 
 ```bash
-python ppo_trainer.py --no-capture_video --no-save_model --num_envs 512 --update_epochs 2
+python ppo_trainer.py --no-capture_video --no-save_model --num_envs 512 --update_epochs 2 --activation_critic relu
 
-# will turn off video and model saving. Uses 512 training environments and updates the policy for 2 epochs per iteration.
+# will turn off video and model saving.
+# Uses 512 training environments and updates the policy for 2 epochs per iteration.
+# changes the activation function for the critic to relu
 ```
 
-## Tuning Parameters 
+## Tuning Parameters for the Baseline Code 
 
 Here are some useful parameters you might want to adjust:
 

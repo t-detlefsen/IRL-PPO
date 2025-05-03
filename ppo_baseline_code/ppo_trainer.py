@@ -93,6 +93,7 @@ class PPO_Trainer():
         self.vf_coef=args.vf_coef
         self.ent_coef= args.ent_coef
         print(f"Environment: {args.env_id}")
+        print("Agent Structure:\n", self.agent)
         
 
 
