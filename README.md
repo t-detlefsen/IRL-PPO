@@ -61,7 +61,7 @@ Here are some useful parameters you might want to adjust:
 python ppo_trainer.py --no-capture_video --no-save_model --num_envs 512 --update_epochs 2
 
 # will turn off video and model saving. Uses 512 training environments and updates the policy for 2 epochs per iteration.
-
+```
 ## References
 
 - [ManiSkill: Generalizable Manipulation Skills Benchmark](https://github.com/haosulab/ManiSkill/tree/main). Hao Su Lab. GitHub. Accessed May 3, 2025.
